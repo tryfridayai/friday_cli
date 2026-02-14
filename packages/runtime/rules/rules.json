@@ -1,0 +1,33 @@
+{
+  "rules": [
+    {
+      "id": "offer_run_generated_code",
+      "name": "Offer to run generated application",
+      "description": "After generating project files, offer to run the app and share a preview.",
+      "triggers": {
+        "minCreatedFiles": 1,
+        "extensions": [".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".json"],
+        "requireTools": ["write", "filewrite", "fileedit"]
+      },
+      "prompt": {
+        "title": "Run the generated project?",
+        "message": "I created {{createdFileCount}} file(s): {{createdFilesSentence}}. Do you want me to run the application/code now and share a preview?",
+        "actions": [
+          {
+            "id": "run_generated_app",
+            "label": "Run application",
+            "style": "primary",
+            "type": "followup_prompt",
+            "promptTemplate": "The user wants to run {{artifactDescriptor}} located in {{workspacePath}}. Install dependencies if needed, start the appropriate dev or start command, and provide the local preview URL. If it is a backend service, keep it running and describe how the user can interact with it via the terminal output."
+          },
+          {
+            "id": "skip_run",
+            "label": "Not now",
+            "style": "secondary",
+            "type": "dismiss"
+          }
+        ]
+      }
+    }
+  ]
+}

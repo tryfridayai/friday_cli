@@ -1,0 +1,20 @@
+{
+  "name": "friday-cli",
+  "version": "0.1.0",
+  "description": "Friday AI command-line interface",
+  "type": "module",
+  "bin": {
+    "friday": "./bin/friday.js"
+  },
+  "main": "src/cli.js",
+  "scripts": {
+    "start": "node bin/friday.js chat"
+  },
+  "dependencies": {
+    "friday-runtime": "*"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

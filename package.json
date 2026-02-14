@@ -1,0 +1,17 @@
+{
+  "name": "friday-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Friday AI - Autonomous agent runtime and CLI",
+  "workspaces": [
+    "packages/runtime",
+    "packages/cli"
+  ],
+  "scripts": {
+    "chat": "friday chat",
+    "serve": "friday serve"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

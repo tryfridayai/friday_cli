@@ -1,0 +1,548 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "${WORKSPACE}"
+      ],
+      "env": {
+        "ALLOWED_PATHS": "${WORKSPACE}"
+      }
+    },
+    "terminal": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${PROJECT_ROOT}/mcp-servers/terminal-server.js"
+      ],
+      "env": {
+        "FRIDAY_WORKSPACE": "${WORKSPACE}"
+      }
+    },
+    "friday-media": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${PROJECT_ROOT}/mcp-servers/media-server.js"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
+        "WORKSPACE_PATH": "${WORKSPACE}",
+        "MEDIA_OUTPUT_DIR": "${WORKSPACE}/generated"
+      },
+      "metadata": {
+        "name": "Friday Media",
+        "description": "Image generation, video generation, TTS, STT, and multi-model queries",
+        "icon": "sparkles"
+      },
+      "auth": [
+        {
+          "id": "api_keys",
+          "type": "credentials",
+          "label": "AI Provider API Keys",
+          "description": "Configure API keys for OpenAI, Google, and ElevenLabs. At least one is required.",
+          "fields": [
+            {
+              "key": "openaiKey",
+              "label": "OpenAI API Key",
+              "type": "secret",
+              "required": false,
+              "placeholder": "sk-...",
+              "env": ["OPENAI_API_KEY"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "googleKey",
+              "label": "Google AI API Key",
+              "type": "secret",
+              "required": false,
+              "placeholder": "AIza...",
+              "env": ["GOOGLE_API_KEY"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "elevenlabsKey",
+              "label": "ElevenLabs API Key",
+              "type": "secret",
+              "required": false,
+              "placeholder": "Your ElevenLabs API key",
+              "env": ["ELEVENLABS_API_KEY"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "firecrawl": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/firecrawl-mcp/dist/index.js"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}",
+        "FIRECRAWL_BASE_URL": "${FIRECRAWL_BASE_URL}"
+      },
+      "auth": [
+        {
+          "id": "api_key",
+          "type": "credentials",
+          "label": "Firecrawl API Key",
+          "description": "Use a Firecrawl API key to authenticate requests.",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "API Key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "fc_live_...",
+              "env": ["FIRECRAWL_API_KEY"],
+              "metadata": { "label": true, "description": true, "expiresAt": true }
+            },
+            {
+              "key": "baseUrl",
+              "label": "Base URL",
+              "type": "text",
+              "required": false,
+              "placeholder": "https://api.firecrawl.dev",
+              "env": ["FIRECRAWL_BASE_URL"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "github": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@modelcontextprotocol/server-github/dist/index.js"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "auth": [
+        {
+          "id": "pat",
+          "type": "credentials",
+          "label": "Personal Access Token",
+          "description": "Use a GitHub PAT with repo + workflow scopes.",
+          "fields": [
+            {
+              "key": "token",
+              "label": "Personal Access Token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "ghp_...",
+              "env": ["GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_TOKEN"],
+              "metadata": { "label": true, "description": true, "expiresAt": true }
+            }
+          ]
+        }
+      ]
+    },
+    "figma": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/figma-developer-mcp/dist/bin.js",
+        "--stdio"
+      ],
+      "env": {
+        "FIGMA_API_KEY": "${FIGMA_API_KEY}"
+      },
+      "auth": [
+        {
+          "id": "api_key",
+          "type": "credentials",
+          "label": "Figma Personal Token",
+          "description": "Use a Figma personal access token.",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "API Key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "figd_...",
+              "env": ["FIGMA_API_KEY"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "resend": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${PROJECT_ROOT}/mcp-servers/resend/build/index.js"
+      ],
+      "env": {
+        "RESEND_API_KEY": "${RESEND_API_KEY}",
+        "SENDER_EMAIL_ADDRESS": "${RESEND_SENDER_EMAIL}",
+        "REPLY_TO_EMAIL_ADDRESS": "${RESEND_REPLY_TO_EMAIL}"
+      },
+      "auth": [
+        {
+          "id": "api_key",
+          "type": "credentials",
+          "label": "Resend API Key",
+          "description": "Connect your Resend account to send emails. Get your API key from resend.com/api-keys",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "API Key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "re_...",
+              "env": ["RESEND_API_KEY"],
+              "metadata": { "label": true, "description": true, "expiresAt": true }
+            },
+            {
+              "key": "senderEmail",
+              "label": "Sender Email",
+              "type": "text",
+              "required": false,
+              "placeholder": "noreply@yourdomain.com",
+              "env": ["RESEND_SENDER_EMAIL"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "replyToEmail",
+              "label": "Reply-To Email",
+              "type": "text",
+              "required": false,
+              "placeholder": "support@yourdomain.com",
+              "env": ["RESEND_REPLY_TO_EMAIL"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "reddit": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/reddit-mcp-server/dist/bin.js"
+      ],
+      "env": {
+        "REDDIT_CLIENT_ID": "${REDDIT_CLIENT_ID}",
+        "REDDIT_CLIENT_SECRET": "${REDDIT_CLIENT_SECRET}",
+        "REDDIT_USERNAME": "${REDDIT_USERNAME}",
+        "REDDIT_PASSWORD": "${REDDIT_PASSWORD}",
+        "REDDIT_USER_AGENT": "${REDDIT_USER_AGENT}"
+      },
+      "auth": [
+        {
+          "id": "credentials",
+          "type": "credentials",
+          "label": "Reddit API Credentials",
+          "description": "Create a Reddit script app at reddit.com/prefs/apps to get your credentials.",
+          "fields": [
+            {
+              "key": "clientId",
+              "label": "Client ID",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Reddit app client ID",
+              "env": ["REDDIT_CLIENT_ID"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "clientSecret",
+              "label": "Client Secret",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Reddit app client secret",
+              "env": ["REDDIT_CLIENT_SECRET"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "username",
+              "label": "Reddit Username",
+              "type": "text",
+              "required": false,
+              "placeholder": "your_reddit_username",
+              "env": ["REDDIT_USERNAME"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "password",
+              "label": "Reddit Password",
+              "type": "secret",
+              "required": false,
+              "placeholder": "Your Reddit password (for write access)",
+              "env": ["REDDIT_PASSWORD"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "twitter": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@enescinar/twitter-mcp/build/index.js"
+      ],
+      "env": {
+        "API_KEY": "${TWITTER_API_KEY}",
+        "API_SECRET_KEY": "${TWITTER_API_SECRET_KEY}",
+        "ACCESS_TOKEN": "${TWITTER_ACCESS_TOKEN}",
+        "ACCESS_TOKEN_SECRET": "${TWITTER_ACCESS_TOKEN_SECRET}"
+      },
+      "auth": [
+        {
+          "id": "credentials",
+          "type": "credentials",
+          "label": "X/Twitter API Keys",
+          "description": "Get API keys from developer.x.com. Free tier allows 1,500 tweets/month.",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "API Key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Twitter API key",
+              "env": ["TWITTER_API_KEY"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "apiSecretKey",
+              "label": "API Secret Key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Twitter API secret key",
+              "env": ["TWITTER_API_SECRET_KEY"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "accessToken",
+              "label": "Access Token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your access token",
+              "env": ["TWITTER_ACCESS_TOKEN"],
+              "metadata": { "label": true, "description": true }
+            },
+            {
+              "key": "accessTokenSecret",
+              "label": "Access Token Secret",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your access token secret",
+              "env": ["TWITTER_ACCESS_TOKEN_SECRET"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "discord": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/mcp-discord/build/index.js"
+      ],
+      "env": {
+        "DISCORD_TOKEN": "${DISCORD_TOKEN}"
+      },
+      "auth": [
+        {
+          "id": "credentials",
+          "type": "credentials",
+          "label": "Discord Bot Token",
+          "description": "Create a bot at discord.com/developers/applications and copy its token.",
+          "fields": [
+            {
+              "key": "botToken",
+              "label": "Bot Token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Discord bot token",
+              "env": ["DISCORD_TOKEN"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "supabase": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@supabase/mcp-server-supabase/dist/transports/stdio.js",
+        "--access-token",
+        "${SUPABASE_PAT}"
+      ],
+      "env": {},
+      "auth": [
+        {
+          "id": "credentials",
+          "type": "credentials",
+          "label": "Supabase Connection",
+          "description": "Connect to a Supabase project.",
+          "fields": [
+            {
+              "key": "accessToken",
+              "label": "Personal Access Token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "sbp_...",
+              "env": ["SUPABASE_PAT"],
+              "metadata": { "label": true, "description": true, "expiresAt": true }
+            },
+            {
+              "key": "mode",
+              "type": "hidden",
+              "required": true,
+              "env": ["SUPABASE_MODE"]
+            },
+            {
+              "key": "projectRef",
+              "type": "hidden",
+              "required": false,
+              "env": ["SUPABASE_PROJECT_REF"]
+            }
+          ]
+        }
+      ]
+    },
+    "google-drive": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@piotr-agier/google-drive-mcp/dist/index.js"
+      ],
+      "env": {
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "${HOME}/.friday/google-drive-oauth.keys.json",
+        "GOOGLE_DRIVE_MCP_TOKEN_PATH": "${HOME}/.friday/google-drive-tokens.json"
+      },
+      "auth": [
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "label": "Connect with Google",
+          "description": "Sign in with your Google account to access Drive, Docs, Sheets, and Slides.",
+          "provider": "google",
+          "scopes": [
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/documents",
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/presentations"
+          ]
+        }
+      ]
+    },
+    "gmail": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/@shinzolabs/gmail-mcp/dist/index.js"
+      ],
+      "env": {
+        "CLIENT_ID": "${GOOGLE_CLIENT_ID}",
+        "CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}",
+        "REFRESH_TOKEN": "${GMAIL_REFRESH_TOKEN}",
+        "AUTH_SERVER_PORT": "13338"
+      },
+      "auth": [
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "label": "Google OAuth",
+          "description": "Sign in with Google to read, search, and send emails via Gmail.",
+          "provider": "google",
+          "scopes": [
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.modify"
+          ],
+          "fields": [
+            {
+              "key": "refreshToken",
+              "env": ["REFRESH_TOKEN", "GMAIL_REFRESH_TOKEN"]
+            }
+          ]
+        }
+      ]
+    },
+    "slack": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/slack-mcp-server/bin/index.js",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "SLACK_MCP_XOXB_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_MCP_ADD_MESSAGE_TOOL": "true"
+      },
+      "auth": [
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "label": "Slack OAuth",
+          "description": "Connect to your Slack workspace to read and send messages.",
+          "provider": "slack",
+          "fields": [
+            {
+              "key": "botToken",
+              "env": ["SLACK_BOT_TOKEN"]
+            }
+          ]
+        },
+        {
+          "id": "credentials",
+          "type": "credentials",
+          "label": "Bot Token",
+          "description": "Use a Slack bot token (xoxb-...) from api.slack.com/apps",
+          "fields": [
+            {
+              "key": "botToken",
+              "label": "Bot Token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "xoxb-...",
+              "env": ["SLACK_BOT_TOKEN"],
+              "metadata": { "label": true, "description": true }
+            }
+          ]
+        }
+      ]
+    },
+    "linkedin": {
+      "command": "${NODE_BIN}",
+      "args": [
+        "${NODE_MODULES}/linkedin-mcp-server/bin/cli.js"
+      ],
+      "env": {
+        "LINKEDIN_ACCESS_TOKEN": "${LINKEDIN_ACCESS_TOKEN}"
+      },
+      "auth": [
+        {
+          "id": "oauth",
+          "type": "oauth",
+          "label": "LinkedIn OAuth",
+          "description": "Connect with LinkedIn to manage your profile and posts. Note: posting requires Community Management API approval.",
+          "provider": "linkedin",
+          "fields": [
+            {
+              "key": "accessToken",
+              "env": ["LINKEDIN_ACCESS_TOKEN"]
+            }
+          ]
+        }
+      ]
+    },
+    "vercel": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.vercel.com"
+      ],
+      "env": {},
+      "auth": [
+        {
+          "id": "oauth",
+          "type": "remote-oauth",
+          "label": "Vercel Login",
+          "description": "Sign in to Vercel to manage deployments and projects. OAuth is handled by the remote server.",
+          "provider": "vercel"
+        }
+      ]
+    }
+  }
+}
