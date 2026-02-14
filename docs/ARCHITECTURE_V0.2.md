@@ -388,12 +388,12 @@ friday-agent/
 │   │   │   │   ├── RunQueue.js           # Queue and execute triggered runs
 │   │   │   │   └── RunStore.js           # Persist run state + history
 │   │   │   │
-│   │   │   ├── notifications/            # Outbound push (for headless/mobile)
-│   │   │   │   ├── NotificationBus.js    # Central dispatcher
+│   │   │   ├── notifications/            # Outbound event push (runtime is emitter only)
+│   │   │   │   ├── NotificationBus.js    # Central event dispatcher
 │   │   │   │   └── channels/
-│   │   │   │       ├── WebSocketChannel.js
-│   │   │   │       ├── WebhookChannel.js
-│   │   │   │       └── QueueChannel.js   # Store for later retrieval
+│   │   │   │       ├── WebSocketChannel.js  # Deliver to connected clients
+│   │   │   │       ├── WebhookChannel.js    # POST to callback URLs
+│   │   │   │       └── QueueChannel.js      # Store for later retrieval by consumers
 │   │   │   │
 │   │   │   └── credentials/             # Credential management
 │   │   │       ├── CredentialStore.js    # Keytar/file storage (from McpCredentials)
@@ -1253,9 +1253,8 @@ Every feature implementation includes its documentation. Docs are written in mar
 | 4.2 | Dockerfile + docker-compose for self-hosting | `guides/self-hosting.md` |
 | 4.3 | CI/CD pipeline (GitHub Actions) | `guides/ci-cd-integration.md` |
 | 4.4 | npm publish as `@friday/runtime` + `@friday/cli` | `getting-started.md` (update) |
-| 4.5 | iOS integration guide | `guides/ios-integration.md` |
-| 4.6 | Electron migration guide | `guides/electron-integration.md` |
-| 4.7 | Final review, security audit, documentation polish | All docs |
+| 4.5 | Integration guides (iOS, Electron, third-party) | `guides/ios-integration.md`, `guides/electron-integration.md` |
+| 4.6 | Final review, security audit, documentation polish | All docs |
 
 **Deliverable:** Published packages. Public documentation. Ready for external review.
 
@@ -1263,16 +1262,10 @@ Every feature implementation includes its documentation. Docs are written in mar
 
 ## 16. Migration from v0.1
 
-### Backward compatibility
-v0.2 must not break the Electron app. The migration path:
+### Independence from Electron
+The runtime is a standalone product in its own repo. It does **not** need to maintain backward compatibility with the Electron app. The runtime's capabilities dictate how consumers (Electron, iOS, web) should integrate — not the other way around.
 
-1. **Phase 1** refactors internals but keeps the same public API (`AgentRuntime`, `loadBackendConfig`, `handleQuery`). The Electron app's `BackendManager` continues to work.
-
-2. **Phase 2** adds new capabilities (plugins) without removing existing ones. The `.mcp.json` approach continues to work as a fallback.
-
-3. **Phase 3** adds new APIs (triggers, subagents) alongside existing ones.
-
-4. **Phase 4** is when the Electron app can optionally switch to `@friday/runtime` as a dependency instead of inline code.
+When the runtime is stable, the Electron app can adopt it as a dependency (`npm install @friday/runtime`). Until then, they evolve independently.
 
 ### File mapping
 
@@ -1297,14 +1290,14 @@ v0.2 must not break the Electron app. The migration path:
 
 ---
 
-## Appendix: Open Questions
+## Appendix: Resolved Decisions
 
-1. **npm org:** When do we create the `@friday` npm org and publish? Phase 4, or earlier for testing?
+1. **npm org:** Publish to `@friday` org after everything is functional and tested (Phase 4). Use `friday-runtime` / `friday-cli` names during development.
 
-2. **Plugin hosting:** Do we host plugin manifests in this repo, or create separate `@friday/plugin-*` packages from the start?
+2. **Plugin hosting:** Plugin manifests ship as part of each plugin's npm package. The runtime bundles a `catalog.json` listing known plugins (name, npm package, description). Plugin packages follow the standard: one npm package per plugin, exports a manifest object. Example: `@friday/plugin-github` exports `{ id: 'github', type: 'mcp', setup: {...}, mcp: {...} }`. During development, manifests live in this repo under `src/plugins/manifests/`. When we publish, each becomes its own package.
 
-3. **Remote model catalog:** Do we host `models.json` at `registry.tryfriday.ai` from the start, or ship it bundled-only initially?
+3. **Model catalog:** Ships bundled as `models.json` in the runtime package. No remote fetch for now. Updated with each runtime release.
 
-4. **Push notifications for iOS:** This requires APNs integration. Build it into the runtime, or keep it as an external service that reads from the notification queue?
+4. **Push notifications:** The runtime is an **event emitter only**. It pushes events to the `NotificationBus`, which delivers to connected WebSocket clients and stores undelivered events in a queue. Consumers (iOS app, web app, etc.) are responsible for building their own delivery infrastructure (APNs, FCM, email, etc.) on top of the events they receive. The runtime does not integrate with APNs, FCM, or any push delivery service directly.
 
-5. **Pricing/metering:** If Friday becomes a managed service, where does usage metering live — in the runtime or in a separate service?
+5. **Pricing/metering:** The runtime tracks **token usage** (input/output/cache tokens per query) and **provider costs** (estimated USD per image/video/audio/chat call based on `models.json` pricing data). This data is exposed via the programmatic API and HTTP endpoints. No hosted service metering — this is per-user, per-session tracking. A managed service layer can aggregate this data separately.
