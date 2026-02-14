@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const CONFIG_DIR = path.join(os.homedir(), '.friday-ai');
+const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 class GlobalConfig {

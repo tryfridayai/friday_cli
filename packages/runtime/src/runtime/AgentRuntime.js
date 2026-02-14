@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import SessionStore from '../sessions/SessionStore.js';
 import { globalConfig } from '../../config/GlobalConfig.js';
 import { skillManager } from '../skills/SkillManager.js';
+import permissionManager, { PERMISSION } from '../permissions/PermissionManager.js';
 import cronParser from 'cron-parser';
 
 // =============================================================================
@@ -1377,34 +1378,31 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
   }
 
  async handlePermissionGate({ toolName, toolInput, suggestions, signal, toolUseID }) {
-
-    console.error(`[PERMISSION CHECK] AI wants to use tool: "${toolName}"`);
-    this.log(`[PERMISSION CHECK] >>> Checking: ${JSON.stringify(toolName)}`);
-
     const cleanName = (toolName || '').trim();
-    // Whitelist tools that never need permission
-    const SAFE_TOOLS = [
-      'mcp__terminal__list_processes'
-    ];
 
-    if (SAFE_TOOLS.includes(cleanName)) {
-      console.error(`[PERMISSION] 🟢 Auto-approving safe tool: ${cleanName}`);
-      return {
-        behavior: 'allow',
-        updatedInput: toolInput
-      };
+    // =========================================================================
+    // PERMISSION MANAGER: Check profile + overrides + session approvals
+    // =========================================================================
+    const filePath = toolInput?.file_path || toolInput?.path || null;
+    const permCheck = permissionManager.check(cleanName, {
+      workspacePath: this.workspacePath,
+      filePath,
+    });
+
+    if (permCheck.decision === PERMISSION.AUTO_APPROVE) {
+      this.log(`[PERMISSION] Auto-approved (${permCheck.source}): ${cleanName}`);
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
-    // =========================================================================
-    // PERMISSION CACHING: Check if tool has cached approval
-    // =========================================================================
+    if (permCheck.decision === PERMISSION.DENY) {
+      this.log(`[PERMISSION] Denied (${permCheck.source}): ${cleanName}`);
+      return { behavior: 'deny', message: `Tool denied by ${permCheck.source} policy`, interrupt: false };
+    }
+
+    // Legacy cache check (GlobalConfig-based "always allow")
     const cachedPermission = this.checkCachedPermission(cleanName);
     if (cachedPermission?.approved) {
-      console.error(`[PERMISSION] 🟢 Auto-approved via cache (${cachedPermission.level}): ${cleanName}`);
-      return {
-        behavior: 'allow',
-        updatedInput: toolInput
-      };
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
     if (this.currentQueryMetadata?.batchMode) {
@@ -1554,6 +1552,7 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     this.pendingUsage = [];
     // Clear session-level permission approvals (but keep persistent "always allow")
     this.sessionApprovals.clear();
+    permissionManager.clearSessionApprovals();
     this.log('[PERMISSION] Session approvals cleared');
   }
 
@@ -1997,6 +1996,10 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     // Store permission approval based on level (if approved)
     if (approved && toolName) {
       const permissionLevel = data.permission_level || 'once';
+      // Also store in PermissionManager for session-level approvals
+      if (permissionLevel === 'session' || permissionLevel === 'always') {
+        permissionManager.addSessionApproval(toolName);
+      }
       const storeResult = this.storePermissionApproval(
         toolName,
         permissionLevel,

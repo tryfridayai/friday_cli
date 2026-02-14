@@ -1,0 +1,478 @@
+{
+  "version": "2026-02-14",
+  "providers": {
+    "openai": {
+      "envKey": "OPENAI_API_KEY",
+      "sdk": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "models": {
+        "gpt-image-1.5": {
+          "name": "GPT Image 1.5",
+          "capabilities": ["image-gen"],
+          "default_for": ["image-gen"],
+          "pricing": {
+            "per_image": {
+              "1024x1024": { "low": 0.011, "medium": 0.042, "high": 0.167 },
+              "1536x1024": { "low": 0.016, "medium": 0.063, "high": 0.25 },
+              "1024x1536": { "low": 0.016, "medium": 0.063, "high": 0.25 },
+              "auto": { "low": 0.011, "medium": 0.042, "high": 0.167 }
+            },
+            "unit": "USD"
+          },
+          "description": "Latest image model; 4x faster generation, better instruction following"
+        },
+        "gpt-image-1": {
+          "name": "GPT Image 1",
+          "capabilities": ["image-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_image": {
+              "1024x1024": { "low": 0.011, "medium": 0.042, "high": 0.167 },
+              "1536x1024": { "low": 0.016, "medium": 0.063, "high": 0.25 },
+              "1024x1536": { "low": 0.016, "medium": 0.063, "high": 0.25 },
+              "auto": { "low": 0.011, "medium": 0.042, "high": 0.167 }
+            },
+            "unit": "USD"
+          },
+          "description": "High quality image generation with strong prompt adherence"
+        },
+        "gpt-image-1-mini": {
+          "name": "GPT Image 1 Mini",
+          "capabilities": ["image-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_image": {
+              "1024x1024": { "low": 0.004, "medium": 0.015, "high": 0.06 },
+              "1536x1024": { "low": 0.006, "medium": 0.023, "high": 0.09 },
+              "1024x1536": { "low": 0.006, "medium": 0.023, "high": 0.09 },
+              "auto": { "low": 0.004, "medium": 0.015, "high": 0.06 }
+            },
+            "unit": "USD"
+          },
+          "description": "Cost-effective image generation for rapid iteration"
+        },
+        "sora-2": {
+          "name": "Sora 2",
+          "capabilities": ["video-gen"],
+          "default_for": ["video-gen"],
+          "pricing": {
+            "per_second": 0.02,
+            "unit": "USD",
+            "notes": "Pricing varies by resolution and duration"
+          },
+          "description": "Fast, flexible video generation with temporal coherence"
+        },
+        "sora-2-pro": {
+          "name": "Sora 2 Pro",
+          "capabilities": ["video-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_second": 0.06,
+            "unit": "USD",
+            "notes": "Higher fidelity output, longer processing time"
+          },
+          "description": "Higher fidelity video generation for professional-quality output"
+        },
+        "gpt-4o-mini-tts": {
+          "name": "GPT-4o Mini TTS",
+          "capabilities": ["tts"],
+          "default_for": ["tts"],
+          "pricing": {
+            "per_1m_characters": 12.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "voices": ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"],
+            "output_formats": ["mp3", "opus", "aac", "flac", "wav", "pcm"],
+            "supports_streaming": true,
+            "supports_instructions": true
+          },
+          "description": "Latest steerable TTS with instruction-following for tone, pacing, and emotion"
+        },
+        "tts-1-hd": {
+          "name": "TTS-1 HD",
+          "capabilities": ["tts"],
+          "default_for": [],
+          "pricing": {
+            "per_1m_characters": 30.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "voices": ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"],
+            "output_formats": ["mp3", "opus", "aac", "flac", "wav", "pcm"],
+            "supports_streaming": true,
+            "supports_instructions": false
+          },
+          "description": "High definition text-to-speech for premium audio quality"
+        },
+        "tts-1": {
+          "name": "TTS-1",
+          "capabilities": ["tts"],
+          "default_for": [],
+          "pricing": {
+            "per_1m_characters": 15.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "voices": ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"],
+            "output_formats": ["mp3", "opus", "aac", "flac", "wav", "pcm"],
+            "supports_streaming": true,
+            "supports_instructions": false
+          },
+          "description": "Standard text-to-speech, optimized for low latency"
+        },
+        "whisper-1": {
+          "name": "Whisper",
+          "capabilities": ["stt"],
+          "default_for": ["stt"],
+          "pricing": {
+            "per_minute": 0.006,
+            "unit": "USD"
+          },
+          "metadata": {
+            "supported_formats": ["flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"],
+            "max_file_size_mb": 25,
+            "supports_timestamps": true,
+            "supports_translation": true
+          },
+          "description": "General-purpose speech recognition with multilingual support"
+        },
+        "gpt-5.2": {
+          "name": "GPT-5.2",
+          "capabilities": ["chat"],
+          "default_for": ["chat"],
+          "pricing": {
+            "input_per_1m_tokens": 2.50,
+            "cached_input_per_1m_tokens": 1.25,
+            "output_per_1m_tokens": 10.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "context_window": 256000,
+            "max_output_tokens": 16384,
+            "supports_vision": true,
+            "supports_function_calling": true,
+            "supports_structured_output": true
+          },
+          "description": "Flagship model; replaces GPT-5.1 with improved reasoning and instruction following"
+        },
+        "gpt-5.2-codex": {
+          "name": "GPT-5.2 Codex",
+          "capabilities": ["chat"],
+          "default_for": [],
+          "pricing": {
+            "input_per_1m_tokens": 2.50,
+            "cached_input_per_1m_tokens": 1.25,
+            "output_per_1m_tokens": 10.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "context_window": 256000,
+            "max_output_tokens": 16384,
+            "supports_vision": true,
+            "supports_function_calling": true,
+            "supports_structured_output": true,
+            "optimized_for": "code"
+          },
+          "description": "Coding-optimized variant of GPT-5.2 for software development tasks"
+        },
+        "gpt-5.2-pro": {
+          "name": "GPT-5.2 Pro",
+          "capabilities": ["chat"],
+          "default_for": [],
+          "pricing": {
+            "input_per_1m_tokens": 15.0,
+            "cached_input_per_1m_tokens": 7.50,
+            "output_per_1m_tokens": 60.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "context_window": 256000,
+            "max_output_tokens": 32768,
+            "supports_vision": true,
+            "supports_function_calling": true,
+            "supports_structured_output": true,
+            "optimized_for": "deep_reasoning"
+          },
+          "description": "Deep reasoning model; uses more compute for harder problems"
+        }
+      }
+    },
+    "google": {
+      "envKey": "GOOGLE_API_KEY",
+      "sdk": "@google/genai",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "models": {
+        "imagen-4-ultra": {
+          "name": "Imagen 4 Ultra",
+          "capabilities": ["image-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_image": {
+              "standard": 0.06,
+              "enhanced": 0.12
+            },
+            "unit": "USD"
+          },
+          "description": "Highest fidelity image generation with photorealistic detail"
+        },
+        "imagen-4": {
+          "name": "Imagen 4",
+          "capabilities": ["image-gen"],
+          "default_for": ["image-gen"],
+          "pricing": {
+            "per_image": {
+              "standard": 0.04,
+              "enhanced": 0.08
+            },
+            "unit": "USD"
+          },
+          "description": "Balanced image generation combining quality and speed"
+        },
+        "imagen-4-fast": {
+          "name": "Imagen 4 Fast",
+          "capabilities": ["image-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_image": {
+              "standard": 0.02,
+              "enhanced": 0.04
+            },
+            "unit": "USD"
+          },
+          "description": "Quick image generation optimized for iteration speed"
+        },
+        "veo-3.1": {
+          "name": "Veo 3.1",
+          "capabilities": ["video-gen"],
+          "default_for": ["video-gen"],
+          "pricing": {
+            "per_second": 0.035,
+            "unit": "USD",
+            "notes": "Paid preview; pricing varies by resolution"
+          },
+          "metadata": {
+            "supports_native_audio": true,
+            "max_resolution": "4K",
+            "max_duration_seconds": 60
+          },
+          "description": "Native audio generation, 4K resolution, highest quality video output"
+        },
+        "veo-3.1-fast": {
+          "name": "Veo 3.1 Fast",
+          "capabilities": ["video-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_second": 0.02,
+            "unit": "USD",
+            "notes": "Paid preview; lower latency variant"
+          },
+          "metadata": {
+            "supports_native_audio": true,
+            "max_resolution": "1080p",
+            "max_duration_seconds": 30
+          },
+          "description": "Lower latency video generation for faster turnaround"
+        },
+        "veo-3": {
+          "name": "Veo 3",
+          "capabilities": ["video-gen"],
+          "default_for": [],
+          "pricing": {
+            "per_second": 0.015,
+            "unit": "USD",
+            "notes": "GA; lower pricing tier"
+          },
+          "metadata": {
+            "supports_native_audio": false,
+            "max_resolution": "1080p",
+            "max_duration_seconds": 30
+          },
+          "description": "Generally available video generation at lower pricing"
+        },
+        "google-tts": {
+          "name": "Google Cloud TTS",
+          "capabilities": ["tts"],
+          "default_for": ["tts"],
+          "pricing": {
+            "standard_per_1m_characters": 4.0,
+            "wavenet_per_1m_characters": 16.0,
+            "neural2_per_1m_characters": 16.0,
+            "journey_per_1m_characters": 30.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "voice_count": 220,
+            "language_count": 40,
+            "voice_types": ["Standard", "WaveNet", "Neural2", "Journey"],
+            "output_formats": ["mp3", "wav", "ogg", "linear16"],
+            "supports_ssml": true
+          },
+          "description": "220+ voices across 40+ languages with multiple voice types"
+        },
+        "google-stt": {
+          "name": "Google Cloud STT",
+          "capabilities": ["stt"],
+          "default_for": ["stt"],
+          "pricing": {
+            "per_minute": 0.016,
+            "unit": "USD",
+            "notes": "V2 API pricing; volume discounts available"
+          },
+          "metadata": {
+            "api_version": "v2",
+            "supports_streaming": true,
+            "supports_real_time": true,
+            "supported_formats": ["flac", "wav", "mp3", "ogg", "webm", "amr"],
+            "max_audio_duration_minutes": 480
+          },
+          "description": "V2 API with streaming support and broad language coverage"
+        },
+        "gemini-3-pro": {
+          "name": "Gemini 3 Pro",
+          "capabilities": ["chat"],
+          "default_for": ["chat"],
+          "pricing": {
+            "input_per_1m_tokens": 1.25,
+            "cached_input_per_1m_tokens": 0.315,
+            "output_per_1m_tokens": 10.0,
+            "unit": "USD"
+          },
+          "metadata": {
+            "context_window": 1000000,
+            "max_output_tokens": 65536,
+            "supports_vision": true,
+            "supports_function_calling": true,
+            "supports_structured_output": true,
+            "status": "preview"
+          },
+          "description": "Reasoning-first model with 1M token context window"
+        },
+        "gemini-3-flash": {
+          "name": "Gemini 3 Flash",
+          "capabilities": ["chat"],
+          "default_for": [],
+          "pricing": {
+            "input_per_1m_tokens": 0.15,
+            "cached_input_per_1m_tokens": 0.0375,
+            "output_per_1m_tokens": 0.60,
+            "unit": "USD"
+          },
+          "metadata": {
+            "context_window": 1000000,
+            "max_output_tokens": 65536,
+            "supports_vision": true,
+            "supports_function_calling": true,
+            "supports_structured_output": true,
+            "status": "preview"
+          },
+          "description": "Fast model with strong reasoning at lower cost"
+        }
+      }
+    },
+    "elevenlabs": {
+      "envKey": "ELEVENLABS_API_KEY",
+      "sdk": "elevenlabs",
+      "baseUrl": "https://api.elevenlabs.io/v1",
+      "models": {
+        "eleven_v3": {
+          "name": "Eleven v3",
+          "capabilities": ["tts"],
+          "default_for": ["tts"],
+          "pricing": {
+            "per_1k_characters": 0.30,
+            "unit": "USD",
+            "notes": "Pricing depends on subscription tier; pay-as-you-go rates shown"
+          },
+          "metadata": {
+            "supports_emotions": true,
+            "supports_sound_effects": true,
+            "supported_expressions": ["sighs", "whispers", "laughs", "gasps", "cries"],
+            "output_formats": ["mp3_44100_128", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100"],
+            "supports_streaming": true
+          },
+          "description": "Newest and most expressive model with natural emotional range"
+        },
+        "eleven_flash_v2_5": {
+          "name": "Flash v2.5",
+          "capabilities": ["tts"],
+          "default_for": [],
+          "pricing": {
+            "per_1k_characters": 0.15,
+            "unit": "USD",
+            "notes": "Optimized for real-time applications"
+          },
+          "metadata": {
+            "latency_ms": 75,
+            "output_formats": ["mp3_44100_128", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100"],
+            "supports_streaming": true,
+            "optimized_for": "real_time"
+          },
+          "description": "Ultra-low ~75ms latency for real-time and conversational use cases"
+        },
+        "eleven_turbo_v2_5": {
+          "name": "Turbo v2.5",
+          "capabilities": ["tts"],
+          "default_for": [],
+          "pricing": {
+            "per_1k_characters": 0.18,
+            "unit": "USD"
+          },
+          "metadata": {
+            "latency_ms": 250,
+            "output_formats": ["mp3_44100_128", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100"],
+            "supports_streaming": true,
+            "optimized_for": "balanced"
+          },
+          "description": "Balanced ~250ms latency with good audio quality"
+        },
+        "eleven_multilingual_v2": {
+          "name": "Multilingual v2",
+          "capabilities": ["tts"],
+          "default_for": [],
+          "pricing": {
+            "per_1k_characters": 0.30,
+            "unit": "USD"
+          },
+          "metadata": {
+            "language_count": 32,
+            "output_formats": ["mp3_44100_128", "pcm_16000", "pcm_22050", "pcm_24000", "pcm_44100"],
+            "supports_streaming": true,
+            "optimized_for": "multilingual"
+          },
+          "description": "Supports 32 languages with natural accent and pronunciation"
+        }
+      }
+    }
+  },
+  "capability_defaults": {
+    "image-gen": { "provider": "openai", "model": "gpt-image-1.5" },
+    "video-gen": { "provider": "google", "model": "veo-3.1" },
+    "tts": { "provider": "elevenlabs", "model": "eleven_v3" },
+    "stt": { "provider": "openai", "model": "whisper-1" },
+    "chat": { "provider": "openai", "model": "gpt-5.2" }
+  },
+  "fallback_order": {
+    "image-gen": [
+      { "provider": "openai", "model": "gpt-image-1.5" },
+      { "provider": "google", "model": "imagen-4" }
+    ],
+    "video-gen": [
+      { "provider": "google", "model": "veo-3.1" },
+      { "provider": "openai", "model": "sora-2" }
+    ],
+    "tts": [
+      { "provider": "elevenlabs", "model": "eleven_v3" },
+      { "provider": "openai", "model": "gpt-4o-mini-tts" },
+      { "provider": "google", "model": "google-tts" }
+    ],
+    "stt": [
+      { "provider": "openai", "model": "whisper-1" },
+      { "provider": "google", "model": "google-stt" }
+    ],
+    "chat": [
+      { "provider": "openai", "model": "gpt-5.2" },
+      { "provider": "google", "model": "gemini-3-pro" }
+    ]
+  }
+}
