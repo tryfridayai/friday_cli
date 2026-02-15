@@ -186,8 +186,19 @@ export default async function chat(args) {
   const backend = spawn('node', [serverScript], {
     cwd: runtimeDir,
     env,
-    stdio: ['pipe', 'pipe', 'inherit'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
+
+  // In verbose mode, forward stderr to the terminal.
+  // In clean mode, suppress it (runtime debug logs are noisy).
+  if (verbose) {
+    backend.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+    });
+  } else {
+    // Consume stderr so the pipe doesn't back up, but discard it
+    backend.stderr.resume();
+  }
 
   backend.on('exit', (code, signal) => {
     if (verbose) {

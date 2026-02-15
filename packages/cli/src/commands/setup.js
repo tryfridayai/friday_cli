@@ -121,14 +121,26 @@ export default async function setup(args) {
 
   // Step 3: Default workspace
   const defaultWorkspace = config.workspace || path.join(os.homedir(), 'FridayWorkspace');
-  const workspace = await ask(rl, `  Workspace directory (${defaultWorkspace}): `);
-  config.workspace = workspace || defaultWorkspace;
+  console.log('  Friday needs a workspace directory — a folder where it can');
+  console.log('  create and edit files. Enter a folder name or full path.');
+  console.log('');
+  const workspace = await ask(rl, `  Workspace path (${defaultWorkspace}): `);
+  let resolvedWorkspace = workspace || defaultWorkspace;
+  // If user typed just a name (no path separator), put it in home directory
+  if (resolvedWorkspace && !resolvedWorkspace.includes(path.sep) && !resolvedWorkspace.startsWith('~')) {
+    resolvedWorkspace = path.join(os.homedir(), resolvedWorkspace);
+  }
+  // Expand ~ to home directory
+  if (resolvedWorkspace.startsWith('~')) {
+    resolvedWorkspace = path.join(os.homedir(), resolvedWorkspace.slice(1));
+  }
+  config.workspace = path.resolve(resolvedWorkspace);
 
   // Create workspace if it doesn't exist
   if (!fs.existsSync(config.workspace)) {
     fs.mkdirSync(config.workspace, { recursive: true });
   }
-  console.log(`  Workspace: ${config.workspace}`);
+  console.log(`  Workspace created: ${config.workspace}`);
   console.log('');
 
   // Step 4: Optional provider keys
@@ -164,13 +176,12 @@ export default async function setup(args) {
   }
 
   console.log('');
-  console.log('  Setup complete! Config saved to ~/.friday/');
-  console.log('');
-  console.log('  Next steps:');
-  console.log('    friday              Start chatting');
-  console.log('    friday install github   Connect GitHub');
-  console.log('    friday --help       See all commands');
+  console.log('  Setup complete!');
   console.log('');
 
   rl.close();
+
+  // Automatically launch chat after setup
+  const chatModule = await import('./chat.js');
+  await chatModule.default({ ...args, workspace: config.workspace });
 }
