@@ -139,45 +139,59 @@ function askQuestion(rl, question) {
 
 /**
  * Read input with secret masking (hides characters with *).
+ * SECURITY: Input is NEVER echoed - only asterisks are shown.
  */
 function askSecret(rl, prompt) {
   return new Promise((resolve) => {
     // Fully detach readline so it doesn't echo input
     rl.pause();
-    rl.terminal = false;
+
+    // Clear any buffered input from readline
+    if (rl.line) {
+      rl.line = '';
+    }
 
     process.stdout.write(prompt);
 
     let input = '';
     const wasRaw = process.stdin.isRaw;
+
+    // IMPORTANT: Set raw mode BEFORE resuming stdin to prevent any echo
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
     }
+
+    // Disable terminal echo on readline
+    rl.terminal = false;
+
     process.stdin.resume();
+
+    const cleanup = () => {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(wasRaw || false);
+      }
+      process.stdout.write('\n');
+      rl.terminal = true;
+
+      // Clear readline buffer before resuming to prevent leakage
+      if (rl.line) {
+        rl.line = '';
+      }
+      rl.resume();
+    };
 
     const onData = (data) => {
       const str = data.toString();
       // Process each character individually (handles paste as a single chunk)
       for (const char of str) {
         if (char === '\r' || char === '\n') {
-          process.stdin.removeListener('data', onData);
-          if (process.stdin.isTTY) {
-            process.stdin.setRawMode(wasRaw || false);
-          }
-          process.stdout.write('\n');
-          rl.terminal = true;
-          rl.resume();
+          cleanup();
           resolve(input);
           return;
         }
         if (char === '\x03') {
-          process.stdin.removeListener('data', onData);
-          if (process.stdin.isTTY) {
-            process.stdin.setRawMode(wasRaw || false);
-          }
-          process.stdout.write('\n');
-          rl.terminal = true;
-          rl.resume();
+          cleanup();
           resolve('');
           return;
         }

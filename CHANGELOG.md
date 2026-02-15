@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CHANGELOG.md` - Version history tracking with date, category, and description format
 - `CLAUDE.md` - AI assistant instructions for maintaining the project
 
+#### Fixed
+- **Fixed askSecret function leaking input to readline buffer** - Secret input now properly clears readline buffer before and after collection to prevent API keys from being sent to agent
+
 #### Security
 - **Fixed API key exposure in agent context** - API keys are now filtered out of environment variables before being passed to the Claude SDK. The agent can no longer access sensitive keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 - **Fixed API key exposure in terminal commands** - Commands executed by the agent no longer have access to API keys. Running `env` or `echo $OPENAI_API_KEY` will not expose secrets.
