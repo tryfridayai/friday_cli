@@ -8,6 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
 const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
@@ -97,7 +102,7 @@ export async function run(argv) {
   const args = parseArgs(argv);
 
   if (args.version) {
-    console.log('friday v0.2.0');
+    console.log(`friday v${pkgJson.version}`);
     process.exit(0);
   }
 
