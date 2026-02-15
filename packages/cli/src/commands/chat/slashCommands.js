@@ -180,8 +180,12 @@ function askSecret(rl, prompt) {
 
     const onData = (data) => {
       const str = data.toString();
-      // Process each character individually (handles paste as a single chunk)
-      for (const char of str) {
+      // Use index-based iteration to properly skip multi-byte escape sequences
+      let i = 0;
+      while (i < str.length) {
+        const char = str[i];
+        const code = char.charCodeAt(0);
+
         if (char === '\r' || char === '\n') {
           cleanup();
           resolve(input);
@@ -197,10 +201,40 @@ function askSecret(rl, prompt) {
             input = input.slice(0, -1);
             process.stdout.write('\b \b');
           }
+          i++;
           continue;
         }
+
+        // Skip escape sequences (arrow keys, etc. send \x1b[A, \x1b[B, etc.)
+        if (code === 0x1b) {
+          i++;
+          // CSI sequences: ESC [ <params> <final byte>
+          if (i < str.length && str[i] === '[') {
+            i++;
+            // Skip parameter bytes (0x30-0x3f) and intermediate bytes (0x20-0x2f)
+            while (i < str.length && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x3f) {
+              i++;
+            }
+            // Skip final byte (0x40-0x7e)
+            if (i < str.length) i++;
+          }
+          // OSC, SS2, SS3 and other ESC sequences: skip next char
+          else if (i < str.length) {
+            i++;
+          }
+          continue;
+        }
+
+        // Skip any other control characters (< 0x20)
+        if (code < 0x20) {
+          i++;
+          continue;
+        }
+
+        // Printable character — accept it
         input += char;
         process.stdout.write('*');
+        i++;
       }
     };
 

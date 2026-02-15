@@ -87,7 +87,7 @@ const TOOLS = [
         prompt: { type: 'string', description: 'Detailed description of the video to generate' },
         provider: { type: 'string', enum: ['openai', 'google'], description: 'AI provider (auto-selects if omitted)' },
         model: { type: 'string', description: 'Specific model ID override' },
-        seconds: { type: 'number', description: 'Video duration in seconds (5-25)', minimum: 5, maximum: 25 },
+        seconds: { type: 'number', enum: [4, 8, 12], description: 'Video duration in seconds. Only 4, 8, or 12 are supported.' },
         size: { type: 'string', enum: ['1280x720', '1920x1080'], description: 'Resolution (OpenAI)' },
         aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1'], description: 'Aspect ratio (Google)' },
         image_url: { type: 'string', description: 'Image URL for image-to-video generation' },

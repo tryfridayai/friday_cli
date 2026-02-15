@@ -19,7 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Fixed
 - **Fixed askSecret function leaking input to readline buffer** - Secret input now properly clears readline buffer before and after collection to prevent API keys from being sent to agent
 - **Fixed API key visibility during paste** - Raw mode is now set before prompt is displayed and input handler is attached first, preventing any key echoing during paste operations
+- **Fixed askSecret capturing terminal escape sequences** - Escape sequences (arrow keys, etc.) are now properly filtered instead of being appended to secret input. This was corrupting plugin credentials stored in `~/.friday/plugins.json` with `\u001b` characters.
 - **Improved restart instructions** - Restart hints now show clear steps: "1. Press Ctrl+C to exit, 2. Run `friday chat` to restart" with note that chat history auto-resumes
+
+#### Changed
+- **Upgraded OpenAI SDK** from `^5.0.0` to `^6.22.0` — adds `client.videos` API needed for video generation (Sora)
+- **Fixed video generation download** — Used `client.videos.downloadContent()` instead of non-existent `status.url`. Videos were never written to disk previously.
+- **Fixed video duration parameter** — API only accepts 4, 8, or 12 seconds. Was accepting 5-25, causing `400 invalid_value` errors. Now snaps to nearest valid value.
 
 #### Security
 - **Fixed API key exposure in agent context** - API keys are now filtered out of environment variables before being passed to the Claude SDK. The agent can no longer access sensitive keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
