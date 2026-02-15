@@ -1,0 +1,37 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### 2025-02-15
+
+#### Security
+- **Fixed API key exposure in agent context** - API keys are now filtered out of environment variables before being passed to the Claude SDK. The agent can no longer access sensitive keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
+- **Fixed API key exposure in terminal commands** - Commands executed by the agent no longer have access to API keys. Running `env` or `echo $OPENAI_API_KEY` will not expose secrets.
+- **Added secure keychain storage for API keys** - The `/keys` command now stores API keys in the system keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) instead of plain text `.env` files.
+
+#### Added
+- `packages/cli/src/secureKeyStore.js` - New secure key storage module using `keytar` for OS-level encryption
+- `filterSensitiveEnv()` function in AgentRuntime.js, terminal-server.js, ProcessRegistry.js, and SubAgentRunner.js to sanitize environment variables
+
+#### Changed
+- `packages/cli/src/commands/chat/slashCommands.js` - `/keys` command now uses secure keychain storage with fallback to .env
+- `packages/cli/src/commands/chat.js` - Loads API keys from secure storage on startup
+- `packages/runtime/src/runtime/AgentRuntime.js` - Environment passed to SDK is now sanitized
+- `packages/runtime/mcp-servers/terminal-server.js` - Spawned processes use sanitized environment
+- `packages/runtime/src/sandbox/ProcessRegistry.js` - All spawned processes use sanitized environment
+- `packages/runtime/src/runtime/SubAgentRunner.js` - Subagents use sanitized environment
+
+#### Dependencies
+- Added `keytar@^7.9.0` to `packages/cli/package.json`
+
+---
+
+## [0.2.1] - 2025-02-15
+
+### Added
+- Initial npm release of `@tryfridayai/cli`
