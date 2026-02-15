@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `README.md` - Comprehensive project documentation with installation, usage, and features
 - `CHANGELOG.md` - Version history tracking with date, category, and description format
 - `CLAUDE.md` - AI assistant instructions for maintaining the project
+- **Plugin awareness in system prompt** - Agent now knows about `/plugins`, `/keys` commands and available plugins. Will guide users to install plugins instead of searching the web.
 
 #### Fixed
 - **Fixed askSecret function leaking input to readline buffer** - Secret input now properly clears readline buffer before and after collection to prevent API keys from being sent to agent
