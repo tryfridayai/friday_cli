@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────
+# Friday AI Runtime — Docker Compose
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your API keys
+#   2. docker compose up
+#
+# The runtime server will be available at http://localhost:8787
+# ─────────────────────────────────────────────────────
+
+services:
+  friday:
+    build: .
+    ports:
+      - "${FRIDAY_PORT:-8787}:8787"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - NODE_ENV=production
+      - FRIDAY_CONFIG_DIR=/root/.friday
+      - FRIDAY_WORKSPACE=/workspace
+    volumes:
+      - friday-config:/root/.friday
+      - friday-workspace:/workspace
+    restart: unless-stopped
+
+volumes:
+  friday-config:
+  friday-workspace:
