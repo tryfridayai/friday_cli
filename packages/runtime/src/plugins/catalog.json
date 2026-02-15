@@ -430,87 +430,9 @@
         "note": "Vercel handles authentication via browser on first use"
       }
     },
-    "image-generation": {
-      "name": "Image Generation",
-      "description": "Generate images from text prompts (DALL-E, Imagen)",
-      "category": "creative",
-      "type": "mcp",
-      "mcp": {
-        "command": "${NODE_BIN}",
-        "args": ["${PROJECT_ROOT}/mcp-servers/media-server.js"],
-        "env": {
-          "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-          "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-          "WORKSPACE_PATH": "${WORKSPACE}",
-          "MEDIA_OUTPUT_DIR": "${WORKSPACE}/generated"
-        }
-      },
-      "setup": {
-        "credentials": [
-          {
-            "key": "openaiKey",
-            "label": "OpenAI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "sk-...",
-            "env": ["OPENAI_API_KEY"],
-            "instructions": "Get your key at https://platform.openai.com/api-keys"
-          },
-          {
-            "key": "googleKey",
-            "label": "Google AI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "AIza...",
-            "env": ["GOOGLE_API_KEY"],
-            "instructions": "Get your key at https://aistudio.google.com/apikey"
-          }
-        ],
-        "note": "OpenAI or Google key required for image generation."
-      }
-    },
-    "video-generation": {
-      "name": "Video Generation",
-      "description": "Generate videos from text prompts (Sora, Veo)",
-      "category": "creative",
-      "type": "mcp",
-      "mcp": {
-        "command": "${NODE_BIN}",
-        "args": ["${PROJECT_ROOT}/mcp-servers/media-server.js"],
-        "env": {
-          "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-          "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-          "WORKSPACE_PATH": "${WORKSPACE}",
-          "MEDIA_OUTPUT_DIR": "${WORKSPACE}/generated"
-        }
-      },
-      "setup": {
-        "credentials": [
-          {
-            "key": "openaiKey",
-            "label": "OpenAI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "sk-...",
-            "env": ["OPENAI_API_KEY"],
-            "instructions": "Get your key at https://platform.openai.com/api-keys"
-          },
-          {
-            "key": "googleKey",
-            "label": "Google AI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "AIza...",
-            "env": ["GOOGLE_API_KEY"],
-            "instructions": "Get your key at https://aistudio.google.com/apikey"
-          }
-        ],
-        "note": "OpenAI or Google key required for video generation."
-      }
-    },
-    "voice-generation": {
-      "name": "Voice Generation",
-      "description": "Text-to-speech and speech-to-text (ElevenLabs, OpenAI)",
+    "ai-media": {
+      "name": "AI Media",
+      "description": "Generate images, videos, and audio with AI (DALL-E, Sora, ElevenLabs)",
       "category": "creative",
       "type": "mcp",
       "mcp": {
@@ -536,6 +458,15 @@
             "instructions": "Get your key at https://platform.openai.com/api-keys"
           },
           {
+            "key": "googleKey",
+            "label": "Google AI API Key",
+            "type": "secret",
+            "required": false,
+            "placeholder": "AIza...",
+            "env": ["GOOGLE_API_KEY"],
+            "instructions": "Get your key at https://aistudio.google.com/apikey"
+          },
+          {
             "key": "elevenlabsKey",
             "label": "ElevenLabs API Key",
             "type": "secret",
@@ -545,7 +476,7 @@
             "instructions": "Get your key at https://elevenlabs.io"
           }
         ],
-        "note": "OpenAI or ElevenLabs key required for voice generation."
+        "note": "At least one provider key needed. More keys = more capabilities (images, videos, voice)."
       }
     }
   }

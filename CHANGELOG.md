@@ -35,7 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - `packages/cli/src/commands/chat/slashCommands.js` - `/keys` command now uses secure keychain storage with fallback to .env
 - `packages/cli/src/commands/chat.js` - Loads API keys from secure storage on startup
-- **Split Friday Media into separate plugins** - Replaced confusing "Friday Media" with three user-friendly plugins: Image Generation, Video Generation, and Voice Generation in new "Creative" category
+- **Made friday-media a core server** - Media generation (images, videos, voice) now works automatically when API keys are set, no plugin installation required
+- **Added OpenAI as video generation provider** - Video generation now supports both OpenAI (Sora) and Google (Veo)
+- **Consolidated media plugins into AI Media** - Single plugin for all media capabilities with clearer naming
 - `packages/runtime/src/runtime/AgentRuntime.js` - Environment passed to SDK is now sanitized
 - `packages/runtime/mcp-servers/terminal-server.js` - Spawned processes use sanitized environment
 - `packages/runtime/src/sandbox/ProcessRegistry.js` - All spawned processes use sanitized environment
