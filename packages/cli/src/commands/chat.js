@@ -103,6 +103,23 @@ function humanizeToolUse(toolName, toolInput) {
   return humanized;
 }
 
+/**
+ * Make absolute file paths clickable in terminal output using OSC 8 hyperlinks.
+ * Supported by iTerm2, modern Terminal.app, Hyper, VS Code terminal, etc.
+ */
+function linkifyPaths(text) {
+  // Match absolute paths like /Users/foo/bar/file.ext
+  return text.replace(/(\/(?:Users|home|tmp|var|opt|etc)\/\S+)/g, (match) => {
+    // Strip trailing punctuation that's not part of the path
+    const trailingMatch = match.match(/([.,;:!?)}\]]+)$/);
+    const cleanPath = trailingMatch ? match.slice(0, -trailingMatch[1].length) : match;
+    const trailing = trailingMatch ? trailingMatch[1] : '';
+    const url = `file://${cleanPath}`;
+    // OSC 8 hyperlink: \e]8;;URL\e\\DISPLAY_TEXT\e]8;;\e\\
+    return `\x1b]8;;${url}\x07${cleanPath}\x1b]8;;\x07${trailing}`;
+  });
+}
+
 // ── Spinner ──────────────────────────────────────────────────────────────
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -153,6 +170,92 @@ function createSpinner() {
   };
 }
 
+// ── Interactive selector ─────────────────────────────────────────────────
+
+/**
+ * Show an interactive arrow-key selector in the terminal.
+ * Returns the selected option object { label, value }.
+ */
+function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}) {
+  return new Promise((resolve) => {
+    let selectedIndex = 0;
+
+    // Pause readline so we can use raw mode
+    if (rlInterface) rlInterface.pause();
+
+    const render = () => {
+      // Move cursor up to overwrite previous render (except first time)
+      if (render._rendered) {
+        process.stdout.write(`\x1b[${options.length}A`);
+      }
+      options.forEach((opt, i) => {
+        const prefix = i === selectedIndex ? `${CYAN}❯${RESET} ${BOLD}` : '  ';
+        const suffix = i === selectedIndex ? RESET : '';
+        const dimLabel = i === selectedIndex ? opt.label : `${DIM}${opt.label}${RESET}`;
+        process.stdout.write(`\r\x1b[K${prefix}${dimLabel}${suffix}\n`);
+      });
+      render._rendered = true;
+    };
+
+    render();
+
+    // Enter raw mode to capture arrow keys
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+
+    const onKey = (data) => {
+      const key = data.toString();
+
+      // Arrow up: ESC[A
+      if (key === '\x1b[A') {
+        selectedIndex = (selectedIndex - 1 + options.length) % options.length;
+        render();
+        return;
+      }
+      // Arrow down: ESC[B
+      if (key === '\x1b[B') {
+        selectedIndex = (selectedIndex + 1) % options.length;
+        render();
+        return;
+      }
+      // Enter
+      if (key === '\r' || key === '\n') {
+        cleanup();
+        resolve(options[selectedIndex]);
+        return;
+      }
+      // Number keys (1-9)
+      const num = parseInt(key);
+      if (num >= 1 && num <= options.length) {
+        selectedIndex = num - 1;
+        render();
+        cleanup();
+        resolve(options[selectedIndex]);
+        return;
+      }
+      // Ctrl+C
+      if (key === '\x03') {
+        cleanup();
+        resolve(options.find((o) => o.value === 'deny') || options[options.length - 1]);
+        return;
+      }
+    };
+
+    const cleanup = () => {
+      process.stdin.removeListener('data', onKey);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(wasRaw || false);
+      }
+      if (rlInterface) rlInterface.resume();
+    };
+
+    process.stdin.on('data', onKey);
+  });
+}
+
 // ── Help ─────────────────────────────────────────────────────────────────
 
 function printHelp() {
@@ -160,12 +263,14 @@ function printHelp() {
 ${DIM}Commands:${RESET}
   ${BOLD}:q${RESET}, ${BOLD}:quit${RESET}           Exit
   ${BOLD}:new${RESET}              Start a new session
-  ${BOLD}:allow${RESET} [json]     Approve pending permission
-  ${BOLD}:deny${RESET} [message]   Deny pending permission
+  ${BOLD}:allow${RESET} [json]     Approve pending permission (shortcut)
+  ${BOLD}:deny${RESET} [message]   Deny pending permission (shortcut)
   ${BOLD}:rule${RESET} <id|#>      Pick action from rule prompt
   ${BOLD}:raw${RESET} <json>       Send raw JSON to backend
   ${BOLD}:verbose${RESET}          Toggle verbose/debug output
   ${BOLD}:help${RESET}             Show this help
+
+${DIM}Permissions use arrow-key selection by default.${RESET}
 `);
 }
 
@@ -333,7 +438,7 @@ export default async function chat(args) {
           if (!isStreaming) {
             isStreaming = true;
           }
-          process.stdout.write(msg.text || msg.content || '');
+          process.stdout.write(linkifyPaths(msg.text || msg.content || ''));
           break;
 
         case 'thinking_complete':
@@ -384,9 +489,32 @@ export default async function chat(args) {
               console.log(`  ${DIM}...and ${entries.length - 3} more${RESET}`);
             }
           }
-          console.log(`${DIM}:allow to approve, :deny to reject${RESET}`);
           console.log('');
-          rl.prompt();
+          // Interactive arrow-key selector
+          selectOption(
+            [
+              { label: 'Allow', value: 'allow' },
+              { label: 'Allow for this session', value: 'session' },
+              { label: 'Deny', value: 'deny' },
+            ],
+            { rl }
+          ).then((choice) => {
+            if (choice.value === 'deny') {
+              sendPermissionResponse(false, {});
+            } else {
+              const permissionLevel = choice.value === 'session' ? 'session' : 'once';
+              const response = {
+                type: 'permission_response',
+                permission_id: pendingPermission.permission_id,
+                approved: true,
+                permission_level: permissionLevel,
+              };
+              writeMessage(response);
+              pendingPermission = null;
+              spinner.start('Working');
+            }
+            rl.prompt();
+          });
           break;
 
         case 'permission_cancelled':

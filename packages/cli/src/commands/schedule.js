@@ -157,46 +157,76 @@ export default async function schedule(args) {
 
     console.log('');
     console.log(`  ${BOLD}Create a scheduled agent${RESET}`);
+    console.log(`  ${DIM}Describe what you want in natural language.${RESET}`);
+    console.log(`  ${DIM}Examples:${RESET}`);
+    console.log(`    ${DIM}"check my emails every morning at 9am"${RESET}`);
+    console.log(`    ${DIM}"research AI news every day at 8am using firecrawl"${RESET}`);
+    console.log(`    ${DIM}"run tests every 3 hours"${RESET}`);
     console.log('');
 
-    const name = await ask(rl, '  Name: ');
-    if (!name) {
-      console.log(`  ${RED}Name is required.${RESET}`);
+    const description = await ask(rl, '  > ');
+    if (!description) {
+      console.log(`  ${RED}Description is required.${RESET}`);
       rl.close();
       return;
     }
 
-    const instructions = await ask(rl, '  What should this agent do?\n  > ');
-    if (!instructions) {
-      console.log(`  ${RED}Instructions are required.${RESET}`);
-      rl.close();
-      return;
-    }
+    // Parse schedule from the description
+    let parsed = parseSchedule(description);
 
-    console.log('');
-    console.log(`  ${DIM}Examples: "every morning at 9am", "every 3 hours", "every monday at 8am"${RESET}`);
-    const scheduleInput = await ask(rl, '  How often? ');
-
-    const parsed = parseSchedule(scheduleInput);
+    // If no schedule detected, ask for it separately
     if (!parsed) {
-      console.log(`  ${RED}Could not parse schedule: "${scheduleInput}"${RESET}`);
-      console.log(`  ${DIM}Try: "every day at 9am", "every 3 hours", "weekdays at 8am"${RESET}`);
-      rl.close();
-      return;
+      console.log(`  ${DIM}Couldn't detect a schedule. When should this run?${RESET}`);
+      console.log(`  ${DIM}Examples: "every morning at 9am", "every 3 hours", "weekdays at 8am"${RESET}`);
+      const scheduleInput = await ask(rl, '  Schedule: ');
+      parsed = parseSchedule(scheduleInput);
+      if (!parsed) {
+        console.log(`  ${RED}Could not parse schedule: "${scheduleInput}"${RESET}`);
+        rl.close();
+        return;
+      }
     }
-    console.log(`  ${DIM}Parsed: ${parsed.humanReadable} (${parsed.cron})${RESET}`);
+
+    // Extract a name from the description (first few meaningful words)
+    const nameFromDesc = description
+      .replace(/every\s+(day|morning|evening|hour|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$/i, '')
+      .replace(/\b(at\s+\d{1,2}(:\d{2})?\s*(am|pm)?)\b/gi, '')
+      .replace(/\b(daily|hourly|weekdays?)\b/gi, '')
+      .replace(/\bevery\s+\d+\s+(minutes?|hours?)\b/gi, '')
+      .replace(/\busing\s+\w+\b/gi, '')
+      .trim();
+    const name = nameFromDesc.length > 3
+      ? nameFromDesc.charAt(0).toUpperCase() + nameFromDesc.slice(1)
+      : description.slice(0, 50);
+
+    // Extract plugin names if mentioned (e.g., "using firecrawl")
+    const pluginMatch = description.match(/\busing\s+([\w,\s]+?)(?:\s+(?:every|daily|hourly|at)\b|$)/i);
+    const plugins = pluginMatch
+      ? pluginMatch[1].split(/[,\s]+/).map(p => p.trim()).filter(Boolean)
+      : [];
 
     console.log('');
-    const pluginsInput = await ask(rl, `  Which plugins does it need? ${DIM}(comma-separated, or Enter for none)${RESET}\n  > `);
-    const plugins = pluginsInput ? pluginsInput.split(',').map(p => p.trim()).filter(Boolean) : [];
+    console.log(`  ${DIM}Name: ${name}${RESET}`);
+    console.log(`  ${DIM}Schedule: ${parsed.humanReadable} (${parsed.cron})${RESET}`);
+    console.log(`  ${DIM}Task: ${description}${RESET}`);
+    if (plugins.length > 0) {
+      console.log(`  ${DIM}Plugins: ${plugins.join(', ')}${RESET}`);
+    }
+    console.log('');
 
+    const confirm = await ask(rl, `  Create this agent? (Y/n): `);
     rl.close();
+
+    if (confirm.toLowerCase() === 'n') {
+      console.log(`  ${DIM}Cancelled.${RESET}`);
+      return;
+    }
 
     try {
       const agent = await store.createAgent('default', {
         name,
-        description: instructions.slice(0, 100),
-        instructions,
+        description: description.slice(0, 100),
+        instructions: description,
         schedule: {
           cron: parsed.cron,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

@@ -241,6 +241,8 @@ export class AgentRuntime extends EventEmitter {
     this.pendingSessionEvents = [];
     this.pendingSessionMetadata = null;
     this.pendingUsage = [];
+    // Model used for cost tracking
+    this.model = null;
     // Query abort controller for stop functionality
     this.currentAbortController = null;
 
@@ -508,6 +510,202 @@ The agent will run automatically according to the schedule. The user can view an
                 ],
                 isError: true
               };
+            }
+          }
+        },
+        // ── Media tools (in-process, using provider adapters) ──────────
+        {
+          name: 'text_to_speech',
+          description: `Convert text to natural-sounding speech audio. Saves an audio file to the workspace.
+
+Supported providers (auto-selected based on available API keys):
+- ElevenLabs (highest quality, most expressive)
+- OpenAI
+- Google
+
+Available voices for ElevenLabs: rachel, drew, paul, sarah, emily, charlie, adam, alice, lily.
+Available voices for OpenAI: alloy, echo, fable, onyx, nova, shimmer.`,
+          inputSchema: {
+            text: z.string().describe('The text to convert to speech'),
+            voice: z.string().optional().describe('Voice name (e.g., "rachel", "adam", "alloy"). Defaults to "rachel" for ElevenLabs, "alloy" for OpenAI.'),
+            provider: z.enum(['elevenlabs', 'openai', 'google']).optional().describe('TTS provider. Auto-selects if omitted based on available API keys.'),
+          },
+          handler: async (args) => {
+            try {
+              const { text, voice, provider: requestedProvider } = args;
+              if (!text) {
+                return { content: [{ type: 'text', text: 'Error: text is required.' }], isError: true };
+              }
+
+              // Lazy-load provider registry
+              const { default: ProviderRegistry, CAPABILITIES } = await import('../../providers/ProviderRegistry.js');
+              const registry = new ProviderRegistry();
+              const providerId = registry.resolveProvider(CAPABILITIES.TTS, requestedProvider);
+              if (!providerId) {
+                return { content: [{ type: 'text', text: 'Error: No TTS provider available. Set ELEVENLABS_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.' }], isError: true };
+              }
+
+              const adapter = await registry.getAdapter(providerId);
+              const result = await adapter.textToSpeech({
+                text,
+                voice,
+                outputDir: self.workspacePath,
+              });
+
+              const filePath = result.path || path.join(self.workspacePath, 'audio', `tts_${Date.now()}.mp3`);
+
+              // If adapter returned buffer but no path, save it
+              if (!result.path && result.buffer) {
+                const dir = path.join(self.workspacePath, 'audio');
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, result.buffer);
+              }
+
+              // Track cost
+              const cost = adapter.estimateCost('tts', { text });
+              if (cost > 0) {
+                costTracker.recordProviderCost(self.currentSessionId, {
+                  provider: providerId,
+                  capability: 'tts',
+                  cost,
+                });
+              }
+
+              self.log(`[MEDIA] TTS complete: ${providerId}, voice: ${result.metadata?.voice || 'default'}, file: ${filePath}`);
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Audio saved to: ${filePath}\nProvider: ${providerId}\nVoice: ${result.metadata?.voice || 'default'}\nEstimated cost: $${cost.toFixed(4)}`
+                }]
+              };
+            } catch (error) {
+              self.log(`[MEDIA] TTS error: ${error.message}`);
+              return { content: [{ type: 'text', text: `Error generating speech: ${error.message}` }], isError: true };
+            }
+          }
+        },
+        {
+          name: 'generate_image',
+          description: `Generate an image from a text prompt. Saves the image file to the workspace.
+
+Supported providers (auto-selected based on available API keys):
+- OpenAI (gpt-image-1)
+- Google (Imagen 4)`,
+          inputSchema: {
+            prompt: z.string().describe('Detailed description of the image to generate'),
+            provider: z.enum(['openai', 'google']).optional().describe('Image provider. Auto-selects if omitted.'),
+            size: z.string().optional().describe('Image size for OpenAI: "1024x1024", "1024x1536", "1536x1024"'),
+            quality: z.enum(['low', 'medium', 'high']).optional().describe('Image quality for OpenAI'),
+            aspect_ratio: z.string().optional().describe('Aspect ratio for Google: "1:1", "16:9", "9:16"'),
+          },
+          handler: async (args) => {
+            try {
+              const { prompt: imagePrompt, provider: requestedProvider, size, quality, aspect_ratio } = args;
+              if (!imagePrompt) {
+                return { content: [{ type: 'text', text: 'Error: prompt is required.' }], isError: true };
+              }
+
+              const { default: ProviderRegistry, CAPABILITIES } = await import('../../providers/ProviderRegistry.js');
+              const registry = new ProviderRegistry();
+              const providerId = registry.resolveProvider(CAPABILITIES.IMAGE_GEN, requestedProvider);
+              if (!providerId) {
+                return { content: [{ type: 'text', text: 'Error: No image generation provider available. Set OPENAI_API_KEY or GOOGLE_API_KEY.' }], isError: true };
+              }
+
+              const adapter = await registry.getAdapter(providerId);
+              const result = await adapter.generateImage({
+                prompt: imagePrompt,
+                size,
+                quality,
+                aspectRatio: aspect_ratio,
+                n: 1,
+                outputDir: self.workspacePath,
+              });
+
+              const cost = adapter.estimateCost('image-gen', { quality });
+              if (cost > 0) {
+                costTracker.recordProviderCost(self.currentSessionId, {
+                  provider: providerId,
+                  capability: 'image-gen',
+                  cost,
+                });
+              }
+
+              // Handle OpenAI response (returns data array with base64/url)
+              if (result.data) {
+                const imgDir = path.join(self.workspacePath, 'images');
+                fs.mkdirSync(imgDir, { recursive: true });
+                const paths = [];
+                for (let i = 0; i < result.data.length; i++) {
+                  const item = result.data[i];
+                  const filePath = path.join(imgDir, `img_${Date.now()}_${i}.png`);
+                  if (item.b64_json) {
+                    fs.writeFileSync(filePath, Buffer.from(item.b64_json, 'base64'));
+                  } else if (item.url) {
+                    const resp = await fetch(item.url);
+                    fs.writeFileSync(filePath, Buffer.from(await resp.arrayBuffer()));
+                  }
+                  paths.push(filePath);
+                }
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `Image saved to: ${paths.join(', ')}\nProvider: ${providerId}\nEstimated cost: $${cost.toFixed(4)}`
+                  }]
+                };
+              }
+
+              // Handle Google response (returns path directly)
+              const filePath = result.path || (Array.isArray(result) ? result[0]?.path : null);
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Image saved to: ${filePath}\nProvider: ${providerId}\nEstimated cost: $${cost.toFixed(4)}`
+                }]
+              };
+            } catch (error) {
+              self.log(`[MEDIA] Image generation error: ${error.message}`);
+              return { content: [{ type: 'text', text: `Error generating image: ${error.message}` }], isError: true };
+            }
+          }
+        },
+        {
+          name: 'list_voices',
+          description: 'List available TTS voices for a provider.',
+          inputSchema: {
+            provider: z.enum(['elevenlabs', 'openai']).optional().describe('Which provider to list voices for. Lists all available if omitted.'),
+          },
+          handler: async (args) => {
+            try {
+              const results = [];
+
+              if (!args.provider || args.provider === 'elevenlabs') {
+                if (process.env.ELEVENLABS_API_KEY) {
+                  try {
+                    const { ElevenLabsAdapter } = await import('../providers/adapters/ElevenLabsAdapter.js');
+                    const adapter = new ElevenLabsAdapter();
+                    const voices = await adapter.listVoices();
+                    results.push(`## ElevenLabs (${voices.length} voices)\n${voices.map(v => `- ${v.name} (${v.id})`).join('\n')}`);
+                  } catch (e) {
+                    results.push(`## ElevenLabs\nError: ${e.message}`);
+                  }
+                }
+              }
+
+              if (!args.provider || args.provider === 'openai') {
+                if (process.env.OPENAI_API_KEY) {
+                  results.push(`## OpenAI\n- alloy\n- echo\n- fable\n- onyx\n- nova\n- shimmer`);
+                }
+              }
+
+              if (results.length === 0) {
+                return { content: [{ type: 'text', text: 'No TTS providers available. Set ELEVENLABS_API_KEY or OPENAI_API_KEY.' }] };
+              }
+
+              return { content: [{ type: 'text', text: results.join('\n\n') }] };
+            } catch (error) {
+              return { content: [{ type: 'text', text: `Error listing voices: ${error.message}` }], isError: true };
             }
           }
         }
@@ -914,6 +1112,16 @@ You have deep knowledge in:
 - **Stay current**: Use ${currentYear} for any date-sensitive searches or content
 - **Stay focused**: Complete the task efficiently without over-engineering
 - **Explain decisions**: Share your reasoning when making design or architecture choices
+
+## Scheduling & Automation
+You have built-in tools for scheduling and automation:
+- **Scheduled Agents**: You can create scheduled agents using the \`create_scheduled_agent\` tool. These run autonomously on a cron schedule (e.g., "every morning at 9am", "every hour", "every Monday at 8am").
+- **Webhooks**: The runtime supports webhook triggers — when an HTTP webhook fires (e.g., from GitHub, Slack, or any service), it can automatically run an agent.
+- **Chain Triggers**: Agents can be chained — when one agent finishes, another can start automatically.
+- **File Watchers**: Agents can be triggered by filesystem changes.
+- **Manual Triggers**: Agents can be triggered on demand via the API.
+
+When a user asks about automating tasks, scheduling recurring work, or reacting to events/webhooks, explain these capabilities and help them set up the automation using the \`create_scheduled_agent\` tool.
 
 ## Web Search Tools
 Choose the right tool for the search task:
@@ -1596,6 +1804,9 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     // Build system prompt with skills (agent routing commented out)
     const { systemPrompt, model: agentModel, agentName } = await this.buildAgentSystemPrompt(metadata, userMessage);
 
+    // Store model for cost tracking
+    this.model = agentModel || 'claude-sonnet-4-5';
+
     // Log that Friday is handling the request
     this.emitMessage({ type: 'info', message: `${agentName} is processing your request...` });
 
@@ -1779,14 +1990,22 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
           is_error: message.is_error || false
         });
         break;
-      case 'usage':
-        if (message.usage) {
-          costTracker.recordTokenUsage(this.currentSessionId, message.usage, this.model);
-          this.emitMessage({ type: 'usage', usage: message.usage });
+      case 'usage': {
+        // SDK may send usage as message.usage or directly on message
+        const usageData = message.usage || (message.input_tokens != null ? message : null);
+        if (usageData) {
+          costTracker.recordTokenUsage(this.currentSessionId, usageData, this.model);
+          this.emitMessage({ type: 'usage', usage: usageData });
         }
         break;
+      }
       case 'result':
         if (message.subtype === 'success') {
+          // Capture usage from result message if present (SDK often embeds it here)
+          const resultUsage = message.usage || message.result?.usage;
+          if (resultUsage && resultUsage.input_tokens != null) {
+            costTracker.recordTokenUsage(this.currentSessionId, resultUsage, this.model);
+          }
           await this.handleSuccessResult(queryContext, fullResponse);
           const sessionCost = costTracker.getSessionCost(this.currentSessionId);
           this.emitMessage({
