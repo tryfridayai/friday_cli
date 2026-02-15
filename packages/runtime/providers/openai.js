@@ -16,26 +16,17 @@ import path from 'path';
 let OpenAI = null;
 let clientInstance = null;
 
-function getClient() {
-  if (clientInstance) return clientInstance;
-  if (!OpenAI) {
-    try {
-      OpenAI = (await import('openai')).default;
-    } catch {
-      throw new Error('openai package not installed. Run: npm install openai');
-    }
-  }
-  clientInstance = new OpenAI();
-  return clientInstance;
-}
-
 // Use dynamic import for lazy loading
 async function ensureClient() {
   if (clientInstance) return clientInstance;
-  const mod = await import('openai');
-  OpenAI = mod.default || mod.OpenAI;
-  clientInstance = new OpenAI();
-  return clientInstance;
+  try {
+    const mod = await import('openai');
+    OpenAI = mod.default || mod.OpenAI;
+    clientInstance = new OpenAI();
+    return clientInstance;
+  } catch {
+    throw new Error('openai package not installed. Run: npm install openai');
+  }
 }
 
 // ─── Default Models ──────────────────────────────────────────────
