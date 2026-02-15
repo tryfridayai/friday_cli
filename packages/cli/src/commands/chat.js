@@ -91,27 +91,21 @@ function humanizeToolUse(toolName, toolInput) {
 
 /** Humanize a tool name for permission prompts — hide MCP internals */
 function humanizePermission(toolName, description) {
-  if (description) {
-    // Strip "Allow Friday to use mcp__server__tool" patterns
-    const cleaned = description
-      .replace(/mcp__\w+__/g, '')
-      .replace(/_/g, ' ');
-    return cleaned;
-  }
-  if (!toolName) return 'use a tool';
-  const parts = toolName.split('__');
-  const action = parts[parts.length - 1];
-
-  // Map MCP server + tool names to friendly descriptions
+  // Map tool actions to friendly descriptions
   const friendlyNames = {
     'generate_image': 'Generate Image',
+    'generate image': 'Generate Image',
     'generate_video': 'Generate Video',
+    'generate video': 'Generate Video',
     'text_to_speech': 'Text to Speech',
+    'text to speech': 'Text to Speech',
     'speech_to_text': 'Speech to Text',
+    'speech to text': 'Speech to Text',
     'query_model': 'Query AI Model',
     'list_voices': 'List Voices',
     'clone_voice': 'Clone Voice',
     'execute_command': 'Run Terminal Command',
+    'execute command': 'Run Terminal Command',
     'start_preview': 'Start Preview Server',
     'stop_preview': 'Stop Preview Server',
     'WebSearch': 'Search the Web',
@@ -119,6 +113,28 @@ function humanizePermission(toolName, description) {
     'scrape': 'Scrape Web Page',
     'crawl': 'Crawl Website',
   };
+
+  if (description) {
+    // Strip MCP server prefixes: "mcp__server__" or "mcp server-name "
+    let cleaned = description
+      .replace(/mcp__[\w-]+__/gi, '')           // mcp__server__tool
+      .replace(/mcp\s+[\w-]+\s+/gi, '')         // mcp server-name tool
+      .replace(/_/g, ' ')
+      .trim();
+
+    // Check if cleaned text matches a friendly name
+    const lowerCleaned = cleaned.toLowerCase();
+    for (const [key, value] of Object.entries(friendlyNames)) {
+      if (lowerCleaned === key.toLowerCase() || lowerCleaned.startsWith(key.toLowerCase())) {
+        return value;
+      }
+    }
+    return cleaned;
+  }
+
+  if (!toolName) return 'use a tool';
+  const parts = toolName.split('__');
+  const action = parts[parts.length - 1];
 
   return friendlyNames[action] || `Allow Friday to use ${action.replace(/_/g, ' ')}`;
 }
