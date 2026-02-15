@@ -9,25 +9,13 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import readline from 'readline';
-import { createRequire } from 'module';
 import {
   PURPLE, BLUE, TEAL, ORANGE, PINK, DIM, RESET, BOLD,
   RED, GREEN, CYAN, YELLOW,
   sectionHeader, labelValue, statusBadge, hint, success, error as errorMsg,
   maskSecret, groupBy, drawBox,
 } from './ui.js';
-
-const require = createRequire(import.meta.url);
-
-// ── Resolve runtime directory ────────────────────────────────────────────
-
-let runtimeDir;
-try {
-  const runtimePkg = require.resolve('friday-runtime/package.json');
-  runtimeDir = path.dirname(runtimePkg);
-} catch {
-  runtimeDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', '..', '..', 'runtime');
-}
+import { runtimeDir } from '../../resolveRuntime.js';
 
 const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
 const ENV_FILE = path.join(CONFIG_DIR, '.env');

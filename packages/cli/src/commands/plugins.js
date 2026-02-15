@@ -2,17 +2,8 @@
  * friday plugins — List installed and available plugins
  */
 
-import { createRequire } from 'module';
 import path from 'path';
-
-const require = createRequire(import.meta.url);
-let runtimeDir;
-try {
-  const runtimePkg = require.resolve('friday-runtime/package.json');
-  runtimeDir = path.dirname(runtimePkg);
-} catch {
-  runtimeDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', '..', 'runtime');
-}
+import { runtimeDir } from '../resolveRuntime.js';
 
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';

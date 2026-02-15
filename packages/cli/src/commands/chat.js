@@ -13,7 +13,6 @@ import os from 'os';
 import path from 'path';
 import readline from 'readline';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 
 // ── Chat modules ─────────────────────────────────────────────────────────
 
@@ -26,20 +25,7 @@ import {
   routeSlashCommand, handleColonCommand, checkPendingResponse,
 } from './chat/slashCommands.js';
 import { checkPreQueryHint, checkPostResponseHint } from './chat/smartAffordances.js';
-
-// ── Resolve runtime ──────────────────────────────────────────────────────
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const require = createRequire(import.meta.url);
-let runtimeDir;
-try {
-  const runtimePkg = require.resolve('friday-runtime/package.json');
-  runtimeDir = path.dirname(runtimePkg);
-} catch {
-  runtimeDir = path.resolve(__dirname, '..', '..', '..', 'runtime');
-}
+import { runtimeDir } from '../resolveRuntime.js';
 const serverScript = path.join(runtimeDir, 'friday-server.js');
 
 // ── Tool humanization ────────────────────────────────────────────────────

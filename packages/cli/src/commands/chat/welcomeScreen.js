@@ -8,23 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { createRequire } from 'module';
 import {
   PURPLE, TEAL, DIM, RESET, BOLD, ORANGE,
   drawBox, capabilityIcon, hint,
 } from './ui.js';
-
-const require = createRequire(import.meta.url);
-
-// ── Resolve paths ────────────────────────────────────────────────────────
-
-let runtimeDir;
-try {
-  const runtimePkg = require.resolve('friday-runtime/package.json');
-  runtimeDir = path.dirname(runtimePkg);
-} catch {
-  runtimeDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', '..', '..', 'runtime');
-}
+import { runtimeDir } from '../../resolveRuntime.js';
 
 const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
 const PLUGINS_FILE = path.join(CONFIG_DIR, 'plugins.json');
