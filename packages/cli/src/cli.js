@@ -16,6 +16,9 @@ const COMMANDS = {
   chat: () => import('./commands/chat.js'),
   serve: () => import('./commands/serve.js'),
   setup: () => import('./commands/setup.js'),
+  install: () => import('./commands/install.js'),
+  uninstall: () => import('./commands/uninstall.js'),
+  plugins: () => import('./commands/plugins.js'),
 };
 
 function parseArgs(argv) {
@@ -54,6 +57,9 @@ Usage:
 Commands:
   chat      Interactive conversation with Friday (default)
   setup     Guided onboarding wizard
+  install   Install a plugin (e.g. friday install github)
+  uninstall Remove a plugin
+  plugins   List installed and available plugins
   serve     Start HTTP/WebSocket server for remote clients
 
 Options:
@@ -66,6 +72,8 @@ Options:
 Examples:
   friday                         Start interactive chat
   friday setup                   First-time setup
+  friday install github          Install GitHub plugin
+  friday plugins                 See all plugins
   friday chat --workspace ./myproject
   friday serve --port 3000
 `);

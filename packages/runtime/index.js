@@ -38,6 +38,9 @@ export { SessionStore } from './src/sessions/SessionStore.js';
 // Permissions
 export { PermissionManager, PERMISSION } from './src/permissions/PermissionManager.js';
 
+// Plugins
+export { PluginManager, pluginManager } from './src/plugins/PluginManager.js';
+
 // MCP
 export { default as McpCredentials } from './src/mcp/McpCredentials.js';
 export { default as McpOAuthManager } from './src/oauth/McpOAuthManager.js';
