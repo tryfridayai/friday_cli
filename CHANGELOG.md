@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Changed
 - `packages/cli/src/commands/chat/slashCommands.js` - `/keys` command now uses secure keychain storage with fallback to .env
 - `packages/cli/src/commands/chat.js` - Loads API keys from secure storage on startup
+- **Split Friday Media into separate plugins** - Replaced confusing "Friday Media" with three user-friendly plugins: Image Generation, Video Generation, and Voice Generation in new "Creative" category
 - `packages/runtime/src/runtime/AgentRuntime.js` - Environment passed to SDK is now sanitized
 - `packages/runtime/mcp-servers/terminal-server.js` - Spawned processes use sanitized environment
 - `packages/runtime/src/sandbox/ProcessRegistry.js` - All spawned processes use sanitized environment

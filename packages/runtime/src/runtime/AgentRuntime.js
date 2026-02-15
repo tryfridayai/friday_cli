@@ -1192,7 +1192,9 @@ Friday has a built-in plugin system for extending capabilities. The user can man
 - **LinkedIn** — Manage LinkedIn posts
 - **Reddit** — Reddit browsing and posting
 - **Firecrawl** — Web scraping and crawling
-- **Friday Media** — Image/video generation, text-to-speech
+- **Image Generation** — Generate images from text (DALL-E, Imagen)
+- **Video Generation** — Generate videos from text (Sora, Veo)
+- **Voice Generation** — Text-to-speech and speech-to-text
 
 **When a user asks about connecting to services (Gmail, Slack, etc.):**
 1. Tell them to use \`/plugins\` to install the relevant plugin
