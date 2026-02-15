@@ -1,6 +1,9 @@
 {
-  "name": "friday-cli",
-  "version": "0.2.0",
+  "name": "@tryfridayai/cli",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "0.2.1",
   "description": "Friday AI — autonomous agent for your terminal. Chat, build apps, research, automate tasks.",
   "type": "module",
   "bin": {

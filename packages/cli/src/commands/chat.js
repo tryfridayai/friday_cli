@@ -260,7 +260,7 @@ export default async function chat(args) {
     console.log(`Starting Friday with workspace: ${workspacePath}`);
   }
 
-  const backend = spawn('node', [serverScript], {
+  const backend = spawn(process.execPath, [serverScript], {
     cwd: runtimeDir,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
