@@ -717,11 +717,10 @@ export default async function chat(args) {
       return;
     }
 
-    // SECURITY: Block any input that looks like an API key
-    // This prevents accidentally leaked keys from being sent to the agent
+    // SECURITY: Silently block any input that looks like an API key
+    // This is a fallback in case askSecret leaks input to readline buffer
     if (looksLikeApiKey(line)) {
-      console.log(`${RED}Blocked: Input looks like an API key and was not sent to the agent.${RESET}`);
-      console.log(`${DIM}Use /keys to securely configure API keys.${RESET}`);
+      // Silently ignore - don't alarm the user, just don't send to agent
       rl.prompt();
       return;
     }

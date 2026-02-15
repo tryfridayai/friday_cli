@@ -145,25 +145,22 @@ function askSecret(rl, prompt) {
   return new Promise((resolve) => {
     // Fully detach readline so it doesn't echo input
     rl.pause();
+    rl.terminal = false;
 
     // Clear any buffered input from readline
     if (rl.line) {
       rl.line = '';
     }
 
-    process.stdout.write(prompt);
-
     let input = '';
     const wasRaw = process.stdin.isRaw;
 
-    // IMPORTANT: Set raw mode BEFORE resuming stdin to prevent any echo
+    // CRITICAL: Set raw mode FIRST before anything else to prevent echo
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
     }
 
-    // Disable terminal echo on readline
-    rl.terminal = false;
-
+    // Resume stdin while in raw mode
     process.stdin.resume();
 
     const cleanup = () => {
@@ -208,6 +205,11 @@ function askSecret(rl, prompt) {
     };
 
     process.stdin.on('data', onData);
+
+    // Write prompt AFTER raw mode is set and handler is attached
+    setImmediate(() => {
+      process.stdout.write(prompt);
+    });
   });
 }
 
