@@ -15,10 +15,23 @@ import readline from 'readline';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
+// ── Chat modules ─────────────────────────────────────────────────────────
+
+import {
+  DIM, RESET, BOLD, YELLOW, RED, CYAN, GREEN, ORANGE,
+  PURPLE, PROMPT_STRING,
+} from './chat/ui.js';
+import { renderWelcome } from './chat/welcomeScreen.js';
+import {
+  routeSlashCommand, handleColonCommand, checkPendingResponse,
+} from './chat/slashCommands.js';
+import { checkPreQueryHint, checkPostResponseHint } from './chat/smartAffordances.js';
+
+// ── Resolve runtime ──────────────────────────────────────────────────────
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Resolve the runtime package's friday-server.js
 const require = createRequire(import.meta.url);
 let runtimeDir;
 try {
@@ -29,25 +42,15 @@ try {
 }
 const serverScript = path.join(runtimeDir, 'friday-server.js');
 
-// ── Styling helpers ──────────────────────────────────────────────────────
-
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
-const YELLOW = '\x1b[33m';
-const RED = '\x1b[31m';
-const CYAN = '\x1b[36m';
-const GREEN = '\x1b[32m';
+// ── Tool humanization ────────────────────────────────────────────────────
 
 /** Format a tool name like "mcp__filesystem__read_file" into "Reading file..." */
 function humanizeToolUse(toolName, toolInput) {
   const name = toolName || 'tool';
   const parts = name.split('__');
-  // Extract the action part (last segment)
   const action = parts[parts.length - 1];
   const server = parts.length >= 3 ? parts[1] : null;
 
-  // Common tool name -> friendly description mappings
   const descriptions = {
     read_file: () => {
       const p = toolInput?.path || toolInput?.file_path;
@@ -95,7 +98,6 @@ function humanizeToolUse(toolName, toolInput) {
     return descriptions[action]();
   }
 
-  // Fallback: humanize the action name
   const humanized = action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c);
   if (server) {
     return `${humanized} (${server})`;
@@ -105,24 +107,20 @@ function humanizeToolUse(toolName, toolInput) {
 
 /**
  * Make absolute file paths clickable in terminal output using OSC 8 hyperlinks.
- * Supported by iTerm2, modern Terminal.app, Hyper, VS Code terminal, etc.
  */
 function linkifyPaths(text) {
-  // Match absolute paths like /Users/foo/bar/file.ext
   return text.replace(/(\/(?:Users|home|tmp|var|opt|etc)\/\S+)/g, (match) => {
-    // Strip trailing punctuation that's not part of the path
     const trailingMatch = match.match(/([.,;:!?)}\]]+)$/);
     const cleanPath = trailingMatch ? match.slice(0, -trailingMatch[1].length) : match;
     const trailing = trailingMatch ? trailingMatch[1] : '';
     const url = `file://${cleanPath}`;
-    // OSC 8 hyperlink: \e]8;;URL\e\\DISPLAY_TEXT\e]8;;\e\\
     return `\x1b]8;;${url}\x07${cleanPath}\x1b]8;;\x07${trailing}`;
   });
 }
 
 // ── Spinner ──────────────────────────────────────────────────────────────
 
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPINNER_FRAMES = ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u2834', '\u2826', '\u2827', '\u2807', '\u280f'];
 
 function createSpinner() {
   let interval = null;
@@ -141,7 +139,6 @@ function createSpinner() {
     clear();
     const frame = `${DIM}${SPINNER_FRAMES[frameIndex]} ${currentText}...${RESET}`;
     process.stdout.write(frame);
-    // Calculate visible length (without ANSI codes)
     lineLength = 2 + currentText.length + 3;
     frameIndex = (frameIndex + 1) % SPINNER_FRAMES.length;
   }
@@ -180,16 +177,14 @@ function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}
   return new Promise((resolve) => {
     let selectedIndex = 0;
 
-    // Pause readline so we can use raw mode
     if (rlInterface) rlInterface.pause();
 
     const render = () => {
-      // Move cursor up to overwrite previous render (except first time)
       if (render._rendered) {
         process.stdout.write(`\x1b[${options.length}A`);
       }
       options.forEach((opt, i) => {
-        const prefix = i === selectedIndex ? `${CYAN}❯${RESET} ${BOLD}` : '  ';
+        const prefix = i === selectedIndex ? `${CYAN}\u276f${RESET} ${BOLD}` : '  ';
         const suffix = i === selectedIndex ? RESET : '';
         const dimLabel = i === selectedIndex ? opt.label : `${DIM}${opt.label}${RESET}`;
         process.stdout.write(`\r\x1b[K${prefix}${dimLabel}${suffix}\n`);
@@ -199,7 +194,6 @@ function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}
 
     render();
 
-    // Enter raw mode to capture arrow keys
     const wasRaw = process.stdin.isRaw;
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
@@ -209,25 +203,21 @@ function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}
     const onKey = (data) => {
       const key = data.toString();
 
-      // Arrow up: ESC[A
       if (key === '\x1b[A') {
         selectedIndex = (selectedIndex - 1 + options.length) % options.length;
         render();
         return;
       }
-      // Arrow down: ESC[B
       if (key === '\x1b[B') {
         selectedIndex = (selectedIndex + 1) % options.length;
         render();
         return;
       }
-      // Enter
       if (key === '\r' || key === '\n') {
         cleanup();
         resolve(options[selectedIndex]);
         return;
       }
-      // Number keys (1-9)
       const num = parseInt(key);
       if (num >= 1 && num <= options.length) {
         selectedIndex = num - 1;
@@ -236,7 +226,6 @@ function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}
         resolve(options[selectedIndex]);
         return;
       }
-      // Ctrl+C
       if (key === '\x03') {
         cleanup();
         resolve(options.find((o) => o.value === 'deny') || options[options.length - 1]);
@@ -254,24 +243,6 @@ function selectOption(options, { prompt: promptText = '', rl: rlInterface } = {}
 
     process.stdin.on('data', onKey);
   });
-}
-
-// ── Help ─────────────────────────────────────────────────────────────────
-
-function printHelp() {
-  console.log(`
-${DIM}Commands:${RESET}
-  ${BOLD}:q${RESET}, ${BOLD}:quit${RESET}           Exit
-  ${BOLD}:new${RESET}              Start a new session
-  ${BOLD}:allow${RESET} [json]     Approve pending permission (shortcut)
-  ${BOLD}:deny${RESET} [message]   Deny pending permission (shortcut)
-  ${BOLD}:rule${RESET} <id|#>      Pick action from rule prompt
-  ${BOLD}:raw${RESET} <json>       Send raw JSON to backend
-  ${BOLD}:verbose${RESET}          Toggle verbose/debug output
-  ${BOLD}:help${RESET}             Show this help
-
-${DIM}Permissions use arrow-key selection by default.${RESET}
-`);
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
@@ -295,14 +266,11 @@ export default async function chat(args) {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
-  // In verbose mode, forward stderr to the terminal.
-  // In clean mode, suppress it (runtime debug logs are noisy).
   if (verbose) {
     backend.stderr.on('data', (chunk) => {
       process.stderr.write(chunk);
     });
   } else {
-    // Consume stderr so the pipe doesn't back up, but discard it
     backend.stderr.resume();
   }
 
@@ -316,7 +284,7 @@ export default async function chat(args) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: `${BOLD}> ${RESET}`,
+    prompt: PROMPT_STRING,
   });
 
   let sessionId = null;
@@ -324,6 +292,7 @@ export default async function chat(args) {
   let pendingRulePrompt = null;
   const rulePromptQueue = [];
   let isStreaming = false;
+  let accumulatedResponse = ''; // Track response text for post-response hints
 
   const spinner = createSpinner();
 
@@ -395,12 +364,43 @@ export default async function chat(args) {
     showRulePrompt();
   }
 
-  // ── Backend message handler ──────────────────────────────────────────
+  // ── Slash command context ──────────────────────────────────────────────
+
+  const slashCtx = {
+    get rl() { return rl; },
+    get sessionId() { return sessionId; },
+    get workspacePath() { return workspacePath; },
+    get verbose() { return verbose; },
+    get spinner() { return spinner; },
+    get backend() { return backend; },
+    writeMessage,
+    selectOption,
+    resetSession() { sessionId = null; },
+    toggleVerbose() {
+      verbose = !verbose;
+      if (verbose) {
+        backend.stderr.removeAllListeners('data');
+        backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+        console.log(`${GREEN}Verbose mode on${RESET}`);
+      } else {
+        backend.stderr.removeAllListeners('data');
+        backend.stderr.resume();
+        console.log(`${DIM}Verbose mode off${RESET}`);
+      }
+    },
+  };
+
+  // ── Backend message handler ────────────────────────────────────────────
 
   function handleBackendLine(line) {
     if (!line.trim()) return;
     try {
       const msg = JSON.parse(line);
+
+      // Check if a slash command is waiting for this response type
+      if (checkPendingResponse(msg)) {
+        return;
+      }
 
       // In verbose mode, show everything raw (original behavior)
       if (verbose) {
@@ -410,48 +410,46 @@ export default async function chat(args) {
 
       switch (msg.type) {
         case 'ready':
-          console.log(`\n${BOLD}Friday${RESET} v0.2.0\n`);
+          console.log(renderWelcome());
+          console.log('');
           rl.prompt();
           break;
 
         case 'session':
           sessionId = msg.session_id;
-          // Session ID is internal — don't show unless verbose
           break;
 
         case 'thinking':
-          // Show thinking state via spinner — don't dump raw thinking text
           if (!spinner.active) {
             spinner.start('Thinking');
           }
           break;
 
         case 'info':
-          // Info messages are internal plumbing — suppress in clean mode
           break;
 
         case 'chunk':
-          // First chunk: stop spinner, start streaming
           if (spinner.active) {
             spinner.stop();
           }
           if (!isStreaming) {
             isStreaming = true;
           }
-          process.stdout.write(linkifyPaths(msg.text || msg.content || ''));
+          {
+            const text = msg.text || msg.content || '';
+            accumulatedResponse += text;
+            process.stdout.write(linkifyPaths(text));
+          }
           break;
 
         case 'thinking_complete':
-          // Ignore — just a signal to clear thinking state
           break;
 
         case 'tool_use': {
-          // Show a brief one-line description of what the tool is doing
           if (spinner.active) {
             spinner.stop();
           }
           if (isStreaming) {
-            // End the streamed text block before showing tool action
             process.stdout.write('\n');
             isStreaming = false;
           }
@@ -461,7 +459,6 @@ export default async function chat(args) {
         }
 
         case 'tool_result':
-          // Tool results are for the agent, not the user — suppress
           break;
 
         case 'permission_request':
@@ -473,11 +470,9 @@ export default async function chat(args) {
             process.stdout.write('\n');
             isStreaming = false;
           }
-          // Clean, compact permission prompt
           console.log('');
           console.log(`${YELLOW}${BOLD}Permission needed:${RESET} ${msg.description || msg.tool_name}`);
           if (msg.tool_input) {
-            // Show a brief summary of key input params
             const entries = Object.entries(msg.tool_input);
             const preview = entries.slice(0, 3).map(([k, v]) => {
               const val = typeof v === 'string' ? v : JSON.stringify(v);
@@ -490,7 +485,6 @@ export default async function chat(args) {
             }
           }
           console.log('');
-          // Interactive arrow-key selector
           selectOption(
             [
               { label: 'Allow', value: 'allow' },
@@ -521,7 +515,6 @@ export default async function chat(args) {
           if (pendingPermission && pendingPermission.permission_id === msg.permission_id) {
             pendingPermission = null;
           }
-          // Silent unless verbose
           break;
 
         case 'rule_prompt':
@@ -552,26 +545,32 @@ export default async function chat(args) {
             const cost = msg.cost.estimated;
             const costStr = cost < 0.01 ? `${(cost * 100).toFixed(2)}c` : `$${cost.toFixed(4)}`;
             const tokens = msg.cost.tokens;
-            console.log(`\n${DIM}${costStr} · ${tokens.input + tokens.output} tokens${RESET}`);
+            console.log(`\n${DIM}${costStr} \u00b7 ${tokens.input + tokens.output} tokens${RESET}`);
           } else {
             console.log('');
+          }
+          // Post-response smart affordance hint
+          if (accumulatedResponse) {
+            const postHint = checkPostResponseHint(accumulatedResponse);
+            if (postHint) {
+              console.log(postHint);
+            }
+            accumulatedResponse = '';
           }
           rl.prompt();
           break;
 
         default:
-          // Unknown message types — silently ignore in clean mode
           break;
       }
     } catch {
-      // Non-JSON output from backend
       if (verbose) {
         process.stdout.write(line);
       }
     }
   }
 
-  // ── Verbose handler (original behavior) ──────────────────────────────
+  // ── Verbose handler (original behavior) ────────────────────────────────
 
   function handleBackendLineVerbose(msg) {
     switch (msg.type) {
@@ -639,40 +638,51 @@ export default async function chat(args) {
     }
   }
 
-  // ── Buffer partial lines from stdout ─────────────────────────────────
+  // ── Buffer partial lines from stdout ───────────────────────────────────
 
   let buffer = '';
   backend.stdout.on('data', (chunk) => {
     buffer += chunk.toString();
     const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() || ''; // keep incomplete last line in buffer
+    buffer = lines.pop() || '';
     lines.forEach(handleBackendLine);
   });
 
-  // ── Welcome ──────────────────────────────────────────────────────────
+  // ── Input handler ──────────────────────────────────────────────────────
 
-  // Don't print help on startup; keep it clean. User can type :help.
-
-  // ── Input handler ────────────────────────────────────────────────────
-
-  rl.on('line', (input) => {
+  rl.on('line', async (input) => {
     const line = input.trim();
     if (!line) {
       rl.prompt();
       return;
     }
 
+    // ── Slash commands (/help, /plugins, etc.) ──────────────────────────
+    if (line.startsWith('/')) {
+      await routeSlashCommand(line, slashCtx);
+      return;
+    }
+
+    // ── Colon commands (backward compatibility) ─────────────────────────
     if (line.startsWith(':')) {
       const [command, ...rest] = line.slice(1).split(' ');
       const argString = rest.join(' ').trim();
+
+      // Check if this is a slash command alias — show migration hint
+      const migrated = handleColonCommand(line, slashCtx);
+
+      // Handle legacy colon-only commands (:allow, :deny, :rule, :raw)
       switch (command) {
         case 'q':
         case 'quit':
+          // Migrate to /quit
+          console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/quit${RESET}`);
           spinner.stop();
           backend.kill();
           rl.close();
           return;
         case 'new':
+          console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/new${RESET}`);
           sessionId = null;
           writeMessage({ type: 'new_session' });
           console.log(`${DIM}New session started.${RESET}`);
@@ -712,28 +722,35 @@ export default async function chat(args) {
           }
           break;
         case 'help':
-          printHelp();
-          break;
+          console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/help${RESET}`);
+          await routeSlashCommand('/help', slashCtx);
+          return;
         case 'verbose':
-          verbose = !verbose;
-          if (verbose) {
-            backend.stderr.removeAllListeners('data');
-            backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
-            console.log(`${GREEN}Verbose mode on${RESET}`);
-          } else {
-            backend.stderr.removeAllListeners('data');
-            backend.stderr.resume();
-            console.log(`${DIM}Verbose mode off${RESET}`);
-          }
+          console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/verbose${RESET}`);
+          slashCtx.toggleVerbose();
           break;
         default:
-          console.log(`${DIM}Unknown command :${command}. Type :help for commands.${RESET}`);
+          // Check if it maps to a slash command
+          if (!migrated) {
+            console.log(`${DIM}Unknown command :${command}. Type /help for commands.${RESET}`);
+          } else {
+            // Route through slash system
+            await routeSlashCommand(`/${command} ${argString}`.trim(), slashCtx);
+            return;
+          }
       }
       rl.prompt();
       return;
     }
 
-    // Send user query
+    // ── Pre-query smart affordance hint ──────────────────────────────────
+    const preHint = checkPreQueryHint(line);
+    if (preHint) {
+      console.log(preHint);
+    }
+
+    // ── Send user query ─────────────────────────────────────────────────
+    accumulatedResponse = '';
     spinner.start('Thinking');
     writeMessage({ type: 'query', message: line, session_id: sessionId });
   });
