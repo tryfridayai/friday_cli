@@ -147,14 +147,18 @@ function sanitizeAuthDefinitions(auth = []) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 2. Load the .env file from the ROOT folder (one level up)
-// In production, .env is in app.asar.unpacked; in dev, it's in project root
+// 2. Load env files — user config first, then project-level
+// ~/.friday/.env takes priority (user-configured keys via /keys or friday setup)
+const fridayEnvPath = path.join(os.homedir(), '.friday', '.env');
+dotenv.config({ path: fridayEnvPath });
+
+// Also load project-level .env (for development / Electron builds)
 const appPath = path.join(__dirname, '..');
 const envPath = appPath.includes('app.asar')
   ? appPath.replace('app.asar', 'app.asar.unpacked') + '/.env'
   : path.join(appPath, '.env');
 dotenv.config({ path: envPath });
-console.error('[Backend] Loading .env from:', envPath);
+console.error('[Backend] Loading .env from:', fridayEnvPath, 'and', envPath);
 
 // =============================================================================
 // INITIALIZATION

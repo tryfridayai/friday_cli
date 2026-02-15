@@ -85,10 +85,41 @@ function humanizeToolUse(toolName, toolInput) {
   }
 
   const humanized = action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c);
-  if (server) {
-    return `${humanized} (${server})`;
-  }
   return humanized;
+}
+
+/** Humanize a tool name for permission prompts — hide MCP internals */
+function humanizePermission(toolName, description) {
+  if (description) {
+    // Strip "Allow Friday to use mcp__server__tool" patterns
+    const cleaned = description
+      .replace(/mcp__\w+__/g, '')
+      .replace(/_/g, ' ');
+    return cleaned;
+  }
+  if (!toolName) return 'use a tool';
+  const parts = toolName.split('__');
+  const action = parts[parts.length - 1];
+
+  // Map MCP server + tool names to friendly descriptions
+  const friendlyNames = {
+    'generate_image': 'Generate Image',
+    'generate_video': 'Generate Video',
+    'text_to_speech': 'Text to Speech',
+    'speech_to_text': 'Speech to Text',
+    'query_model': 'Query AI Model',
+    'list_voices': 'List Voices',
+    'clone_voice': 'Clone Voice',
+    'execute_command': 'Run Terminal Command',
+    'start_preview': 'Start Preview Server',
+    'stop_preview': 'Stop Preview Server',
+    'WebSearch': 'Search the Web',
+    'WebFetch': 'Fetch Web Page',
+    'scrape': 'Scrape Web Page',
+    'crawl': 'Crawl Website',
+  };
+
+  return friendlyNames[action] || `Allow Friday to use ${action.replace(/_/g, ' ')}`;
 }
 
 /**
@@ -239,6 +270,24 @@ export default async function chat(args) {
     args.workspace || process.env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace')
   );
   fs.mkdirSync(workspacePath, { recursive: true });
+
+  // Load ~/.friday/.env into process.env so the runtime sees user-configured keys
+  const fridayEnvPath = path.join(os.homedir(), '.friday', '.env');
+  try {
+    if (fs.existsSync(fridayEnvPath)) {
+      const content = fs.readFileSync(fridayEnvPath, 'utf8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim();
+        if (key && val && !process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  } catch { /* ignore */ }
 
   const env = { ...process.env, FRIDAY_WORKSPACE: workspacePath };
 
@@ -457,7 +506,7 @@ export default async function chat(args) {
             isStreaming = false;
           }
           console.log('');
-          console.log(`${YELLOW}${BOLD}Permission needed:${RESET} ${msg.description || msg.tool_name}`);
+          console.log(`${YELLOW}${BOLD}Permission needed:${RESET} ${humanizePermission(msg.tool_name, msg.description)}`);
           if (msg.tool_input) {
             const entries = Object.entries(msg.tool_input);
             const preview = entries.slice(0, 3).map(([k, v]) => {
