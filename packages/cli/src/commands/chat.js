@@ -479,19 +479,15 @@ export default async function chat(args) {
             ],
             { rl }
           ).then((choice) => {
+            if (!pendingPermission) {
+              // Permission was cancelled while user was choosing
+              rl.prompt();
+              return;
+            }
             if (choice.value === 'deny') {
               sendPermissionResponse(false, {});
             } else {
-              const permissionLevel = choice.value === 'session' ? 'session' : 'once';
-              const response = {
-                type: 'permission_response',
-                permission_id: pendingPermission.permission_id,
-                approved: true,
-                permission_level: permissionLevel,
-              };
-              writeMessage(response);
-              pendingPermission = null;
-              spinner.start('Working');
+              sendPermissionResponse(true, {});
             }
             rl.prompt();
           });

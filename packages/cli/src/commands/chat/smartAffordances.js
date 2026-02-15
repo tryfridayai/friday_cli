@@ -104,6 +104,11 @@ export function checkPreQueryHint(input) {
       return `  ${ORANGE}You need a ${intent.keyLabel} key for ${intent.hint}. Try ${BOLD}/keys${RESET}`;
     }
 
+    // Video intent — warn about cost
+    if (intent.capability === 'video') {
+      return `  ${ORANGE}⚠ Video generation can be expensive ($0.50–$5+ per video).${RESET}\n  ${DIM}Monitor usage at your provider's dashboard (e.g. platform.openai.com/usage).${RESET}`;
+    }
+
     // Schedule intent — offer the /schedule command
     if (intent.capability === 'schedule') {
       return `  ${DIM}Tip: Use ${BOLD}/schedule${RESET}${DIM} to manage recurring tasks.${RESET}`;
