@@ -10,6 +10,7 @@ import SessionStore from '../sessions/SessionStore.js';
 import { globalConfig } from '../../config/GlobalConfig.js';
 import { skillManager } from '../skills/SkillManager.js';
 import permissionManager, { PERMISSION } from '../permissions/PermissionManager.js';
+import costTracker from '../providers/CostTracker.js';
 import cronParser from 'cron-parser';
 
 // =============================================================================
@@ -1780,13 +1781,23 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
         break;
       case 'usage':
         if (message.usage) {
+          costTracker.recordTokenUsage(this.currentSessionId, message.usage, this.model);
           this.emitMessage({ type: 'usage', usage: message.usage });
         }
         break;
       case 'result':
         if (message.subtype === 'success') {
           await this.handleSuccessResult(queryContext, fullResponse);
-          this.emitMessage({ type: 'complete', result: message.result, session_id: this.currentSessionId });
+          const sessionCost = costTracker.getSessionCost(this.currentSessionId);
+          this.emitMessage({
+            type: 'complete',
+            result: message.result,
+            session_id: this.currentSessionId,
+            cost: {
+              tokens: sessionCost.tokens,
+              estimated: sessionCost.totalCost,
+            },
+          });
         }
         break;
       default:

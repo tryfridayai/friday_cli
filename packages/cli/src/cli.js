@@ -19,6 +19,7 @@ const COMMANDS = {
   install: () => import('./commands/install.js'),
   uninstall: () => import('./commands/uninstall.js'),
   plugins: () => import('./commands/plugins.js'),
+  schedule: () => import('./commands/schedule.js'),
 };
 
 function parseArgs(argv) {
@@ -60,6 +61,7 @@ Commands:
   install   Install a plugin (e.g. friday install github)
   uninstall Remove a plugin
   plugins   List installed and available plugins
+  schedule  Manage scheduled agents
   serve     Start HTTP/WebSocket server for remote clients
 
 Options:

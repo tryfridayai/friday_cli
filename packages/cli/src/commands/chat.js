@@ -419,7 +419,15 @@ export default async function chat(args) {
           if (isStreaming) {
             isStreaming = false;
           }
-          console.log(''); // newline after streamed chunks
+          // Show cost summary if available
+          if (msg.cost && msg.cost.estimated > 0) {
+            const cost = msg.cost.estimated;
+            const costStr = cost < 0.01 ? `${(cost * 100).toFixed(2)}c` : `$${cost.toFixed(4)}`;
+            const tokens = msg.cost.tokens;
+            console.log(`\n${DIM}${costStr} · ${tokens.input + tokens.output} tokens${RESET}`);
+          } else {
+            console.log('');
+          }
           rl.prompt();
           break;
 

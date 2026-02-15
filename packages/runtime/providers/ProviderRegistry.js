@@ -10,10 +10,17 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Adapter classes (lazy-loaded)
+const ADAPTER_LOADERS = {
+  openai: () => import('../src/providers/adapters/OpenAIAdapter.js').then((m) => m.OpenAIAdapter),
+  google: () => import('../src/providers/adapters/GoogleAdapter.js').then((m) => m.GoogleAdapter),
+  elevenlabs: () => import('../src/providers/adapters/ElevenLabsAdapter.js').then((m) => m.ElevenLabsAdapter),
+};
+
 // Capability types
 export const CAPABILITIES = {
-  IMAGE_GEN: 'imageGen',
-  VIDEO_GEN: 'videoGen',
+  IMAGE_GEN: 'image-gen',
+  VIDEO_GEN: 'video-gen',
   TTS: 'tts',
   STT: 'stt',
   CHAT: 'chat',
@@ -29,7 +36,7 @@ export const PROVIDERS = {
 // Default priority per capability (first available provider wins)
 const DEFAULT_PRIORITY = {
   [CAPABILITIES.IMAGE_GEN]: [PROVIDERS.OPENAI, PROVIDERS.GOOGLE],
-  [CAPABILITIES.VIDEO_GEN]: [PROVIDERS.GOOGLE, PROVIDERS.OPENAI],
+  [CAPABILITIES.VIDEO_GEN]: [PROVIDERS.GOOGLE],
   [CAPABILITIES.TTS]: [PROVIDERS.ELEVENLABS, PROVIDERS.OPENAI, PROVIDERS.GOOGLE],
   [CAPABILITIES.STT]: [PROVIDERS.OPENAI, PROVIDERS.GOOGLE],
   [CAPABILITIES.CHAT]: [PROVIDERS.OPENAI, PROVIDERS.GOOGLE],
@@ -176,6 +183,68 @@ class ProviderRegistry {
   listAvailableProviders(capability) {
     const priorities = DEFAULT_PRIORITY[capability] || [];
     return priorities.filter((pid) => this.hasApiKey(pid));
+  }
+
+  // ─── Adapter Access ─────────────────────────────────────────────
+
+  /**
+   * Get a provider adapter instance (lazy-loaded).
+   * @param {string} providerId - One of PROVIDERS values
+   * @returns {Promise<import('../src/providers/adapters/BaseAdapter.js').BaseAdapter>}
+   */
+  async getAdapter(providerId) {
+    if (this._providers[providerId]) return this._providers[providerId];
+
+    const loader = ADAPTER_LOADERS[providerId];
+    if (!loader) throw new Error(`Unknown provider: ${providerId}`);
+
+    const AdapterClass = await loader();
+    this._providers[providerId] = new AdapterClass();
+    return this._providers[providerId];
+  }
+
+  /**
+   * Resolve provider and execute a capability method.
+   *
+   * @param {string} capability - e.g. 'image-gen', 'tts', 'stt'
+   * @param {string} method - Adapter method name (e.g. 'generateImage', 'textToSpeech')
+   * @param {object} params - Parameters to pass to the method
+   * @param {string} [requestedProvider] - Explicit provider override
+   * @returns {Promise<object>} - Result from the adapter method
+   */
+  async execute(capability, method, params, requestedProvider = null) {
+    const providerId = this.resolveProvider(capability, requestedProvider);
+    if (!providerId) {
+      throw new Error(`No provider available for capability: ${capability}. Set up an API key for one of: ${(DEFAULT_PRIORITY[capability] || []).join(', ')}`);
+    }
+
+    const adapter = await this.getAdapter(providerId);
+    if (typeof adapter[method] !== 'function') {
+      throw new Error(`Provider ${providerId} does not support method: ${method}`);
+    }
+
+    return adapter[method](params);
+  }
+
+  /**
+   * List all available adapters with their capabilities.
+   */
+  async listAvailableAdapters() {
+    const results = [];
+    for (const [id, loader] of Object.entries(ADAPTER_LOADERS)) {
+      try {
+        const adapter = await this.getAdapter(id);
+        const available = await adapter.isAvailable();
+        results.push({
+          id,
+          available,
+          capabilities: adapter.getCapabilities(),
+        });
+      } catch {
+        results.push({ id, available: false, capabilities: [] });
+      }
+    }
+    return results;
   }
 }
 

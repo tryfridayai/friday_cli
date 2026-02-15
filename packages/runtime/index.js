@@ -41,6 +41,15 @@ export { PermissionManager, PERMISSION } from './src/permissions/PermissionManag
 // Plugins
 export { PluginManager, pluginManager } from './src/plugins/PluginManager.js';
 
+// Cost tracking
+export { CostTracker, default as costTracker } from './src/providers/CostTracker.js';
+
+// Subagents
+export { SubAgentRunner } from './src/runtime/SubAgentRunner.js';
+
+// Triggers
+export { TriggerRouter } from './src/scheduler/TriggerRouter.js';
+
 // MCP
 export { default as McpCredentials } from './src/mcp/McpCredentials.js';
 export { default as McpOAuthManager } from './src/oauth/McpOAuthManager.js';
@@ -56,3 +65,7 @@ export { default as ProcessRegistry, getProcessRegistry } from './src/sandbox/Pr
 
 // Multi-modal providers
 export { default as ProviderRegistry, MediaContext, CAPABILITIES, PROVIDERS } from './providers/ProviderRegistry.js';
+export { BaseAdapter } from './src/providers/adapters/BaseAdapter.js';
+export { OpenAIAdapter } from './src/providers/adapters/OpenAIAdapter.js';
+export { GoogleAdapter } from './src/providers/adapters/GoogleAdapter.js';
+export { ElevenLabsAdapter } from './src/providers/adapters/ElevenLabsAdapter.js';
