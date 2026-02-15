@@ -164,6 +164,7 @@ ${DIM}Commands:${RESET}
   ${BOLD}:deny${RESET} [message]   Deny pending permission
   ${BOLD}:rule${RESET} <id|#>      Pick action from rule prompt
   ${BOLD}:raw${RESET} <json>       Send raw JSON to backend
+  ${BOLD}:verbose${RESET}          Toggle verbose/debug output
   ${BOLD}:help${RESET}             Show this help
 `);
 }
@@ -171,7 +172,7 @@ ${DIM}Commands:${RESET}
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export default async function chat(args) {
-  const verbose = args.verbose || false;
+  let verbose = args.verbose || false;
   const workspacePath = path.resolve(
     args.workspace || process.env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace')
   );
@@ -332,7 +333,11 @@ export default async function chat(args) {
           if (!isStreaming) {
             isStreaming = true;
           }
-          process.stdout.write(msg.content || '');
+          process.stdout.write(msg.text || msg.content || '');
+          break;
+
+        case 'thinking_complete':
+          // Ignore — just a signal to clear thinking state
           break;
 
         case 'tool_use': {
@@ -449,7 +454,7 @@ export default async function chat(args) {
         console.log(`[info] ${msg.message}`);
         break;
       case 'chunk':
-        process.stdout.write(msg.content || '');
+        process.stdout.write(msg.text || msg.content || '');
         break;
       case 'permission_request':
         pendingPermission = msg;
@@ -572,6 +577,18 @@ export default async function chat(args) {
           break;
         case 'help':
           printHelp();
+          break;
+        case 'verbose':
+          verbose = !verbose;
+          if (verbose) {
+            backend.stderr.removeAllListeners('data');
+            backend.stderr.on('data', (chunk) => process.stderr.write(chunk));
+            console.log(`${GREEN}Verbose mode on${RESET}`);
+          } else {
+            backend.stderr.removeAllListeners('data');
+            backend.stderr.resume();
+            console.log(`${DIM}Verbose mode off${RESET}`);
+          }
           break;
         default:
           console.log(`${DIM}Unknown command :${command}. Type :help for commands.${RESET}`);
