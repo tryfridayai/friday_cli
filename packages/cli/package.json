@@ -1,17 +1,38 @@
 {
   "name": "friday-cli",
-  "version": "0.1.0",
-  "description": "Friday AI command-line interface",
+  "version": "0.2.0",
+  "description": "Friday AI command-line interface — chat with Claude agents from your terminal",
   "type": "module",
   "bin": {
     "friday": "./bin/friday.js"
   },
   "main": "src/cli.js",
+  "files": [
+    "bin/",
+    "src/"
+  ],
   "scripts": {
-    "start": "node bin/friday.js chat"
+    "start": "node bin/friday.js chat",
+    "test": "node --test tests/*.test.mjs"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tryfridayai/friday_cli.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/tryfridayai/friday_cli#readme",
+  "keywords": [
+    "ai",
+    "cli",
+    "claude",
+    "agent",
+    "friday",
+    "terminal",
+    "chat"
+  ],
+  "author": "Friday AI <hello@tryfriday.ai>",
   "dependencies": {
-    "friday-runtime": "*"
+    "friday-runtime": "^0.2.0"
   },
   "engines": {
     "node": ">=18.0.0"

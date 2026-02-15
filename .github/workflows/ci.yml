@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, agent_v0.2, 'v_0.2_*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: |
+          cd packages/runtime && npm install --ignore-scripts 2>/dev/null || true
+          cd ../../packages/cli && npm install --ignore-scripts 2>/dev/null || true
+
+      - name: Run runtime tests
+        run: cd packages/runtime && npm test
+
+      - name: Run CLI tests
+        run: cd packages/cli && npm test
+
+      - name: Verify runtime exports
+        run: |
+          node -e "
+            import('./packages/runtime/index.js').then(m => {
+              const exports = Object.keys(m);
+              console.log('Runtime exports:', exports.length);
+              if (exports.length < 10) process.exit(1);
+              console.log('OK');
+            }).catch(e => { console.error(e.message); process.exit(1); });
+          "
+
+      - name: Verify CLI loads
+        run: |
+          node -e "
+            import('./packages/cli/src/cli.js').then(m => {
+              if (typeof m.run !== 'function') process.exit(1);
+              console.log('CLI OK');
+            }).catch(e => { console.error(e.message); process.exit(1); });
+          "

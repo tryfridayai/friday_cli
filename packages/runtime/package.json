@@ -1,6 +1,6 @@
 {
   "name": "friday-runtime",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Friday AI agent runtime — execute Claude agents with MCP tools, permissions, and session management",
   "type": "module",
   "main": "index.js",
@@ -10,39 +10,54 @@
     "./server": "./server.js",
     "./stdio": "./friday-server.js"
   },
+  "files": [
+    "index.js",
+    "server.js",
+    "friday-server.js",
+    "src/",
+    "providers/",
+    "config/",
+    "rules/",
+    "mcp-servers/"
+  ],
   "scripts": {
     "start": "node friday-server.js",
     "stdio": "node friday-server.js",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "test": "node --test tests/*.test.mjs"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tryfridayai/friday_cli.git",
+    "directory": "packages/runtime"
+  },
+  "homepage": "https://github.com/tryfridayai/friday_cli#readme",
+  "keywords": [
+    "ai",
+    "agent",
+    "claude",
+    "anthropic",
+    "mcp",
+    "runtime",
+    "autonomous",
+    "multi-modal"
+  ],
+  "author": "Friday AI <hello@tryfriday.ai>",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.23",
     "@anthropic-ai/sdk": "^0.71.2",
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "@modelcontextprotocol/server-filesystem": "^2025.12.18",
-    "@modelcontextprotocol/server-github": "^2025.4.8",
     "cron-parser": "^4.9.0",
     "dotenv": "^17.2.3",
     "node-cron": "^3.0.3",
     "pino": "^9.0.0",
-    "openai": "^5.0.0",
-    "@google/genai": "^1.0.0",
-    "@elevenlabs/elevenlabs-js": "^2.0.0",
     "ws": "^8.18.3",
     "zod": "^3.24.1 || ^4.0.0"
   },
   "optionalDependencies": {
-    "@enescinar/twitter-mcp": "^0.2.0",
-    "@piotr-agier/google-drive-mcp": "*",
-    "@shinzolabs/gmail-mcp": "*",
-    "@supabase/mcp-server-supabase": "^0.6.3",
-    "figma-developer-mcp": "^0.6.4",
-    "firecrawl-mcp": "^3.7.4",
-    "linkedin-mcp-server": "*",
-    "mcp-discord": "*",
-    "mcp-remote": "*",
-    "reddit-mcp-server": "^1.2.1",
-    "slack-mcp-server": "*"
+    "@elevenlabs/elevenlabs-js": "^2.0.0",
+    "@google/genai": "^1.0.0",
+    "openai": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

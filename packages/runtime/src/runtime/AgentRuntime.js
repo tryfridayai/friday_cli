@@ -1,26 +1,17 @@
 import EventEmitter from 'events';
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-// UI-specific tools removed from standalone runtime — stubbed out
-const detectPreview = () => null;
-const handleAGGridFile = () => {};
 import SessionStore from '../sessions/SessionStore.js';
 import { globalConfig } from '../../config/GlobalConfig.js';
-// NOTE: Agent-based routing commented out - using skills-only approach
-// import { agentManager } from '../agents/AgentManager.js';
 import { skillManager } from '../skills/SkillManager.js';
+import permissionManager, { PERMISSION } from '../permissions/PermissionManager.js';
+import costTracker from '../providers/CostTracker.js';
 import cronParser from 'cron-parser';
-// import { agentRouter } from '../agents/AgentRouter.js';
-
-
-const WEB_EXTENSIONS = new Set(['.html', '.css', '.scss', '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte']);
-const BACKEND_EXTENSIONS = new Set(['.py', '.rb', '.go', '.rs', '.java', '.cs', '.php', '.kt', '.swift', '.ts', '.js']);
 
 // =============================================================================
 // DANGEROUS COMMAND FILTERING (Sandboxing)
@@ -131,121 +122,6 @@ function checkDangerousCommand(command) {
   return { blocked: false };
 }
 
-// =============================================================================
-// ELECTRON NODE.JS WRAPPER SETUP
-// =============================================================================
-// Creates wrapper scripts for node, npm, and npx that use Electron's bundled
-// Node.js runtime. This allows the agent to run npm commands even when Node.js
-// is not installed on the user's system.
-// =============================================================================
-
-let electronBinPath = null;
-
-function setupElectronNodeWrappers() {
-  if (electronBinPath) {
-    return electronBinPath;
-  }
-
-  const binDir = path.join(os.tmpdir(), 'friday-node-bin');
-
-  try {
-    fs.mkdirSync(binDir, { recursive: true });
-  } catch (err) {
-    if (err.code !== 'EEXIST') {
-      console.error('[RUNTIME] Failed to create bin directory:', err.message);
-      return null;
-    }
-  }
-
-  const electronExe = process.execPath;
-  const appRoot = path.resolve(path.dirname(process.argv[1] || __dirname), '..');
-
-  // Find npm-cli.js - check multiple possible locations
-  const npmCliPaths = [
-    path.join(appRoot, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(appRoot, 'node_modules', '.bin', 'npm'),
-    path.join(path.dirname(electronExe), '..', 'Resources', 'app.asar.unpacked', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(path.dirname(electronExe), '..', 'Resources', 'app', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-
-  let npmCliPath = null;
-  for (const p of npmCliPaths) {
-    if (fs.existsSync(p)) {
-      npmCliPath = p;
-      break;
-    }
-  }
-
-  // Find npx-cli.js
-  const npxCliPaths = [
-    path.join(appRoot, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
-    path.join(path.dirname(electronExe), '..', 'Resources', 'app.asar.unpacked', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
-    path.join(path.dirname(electronExe), '..', 'Resources', 'app', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
-  ];
-
-  let npxCliPath = null;
-  for (const p of npxCliPaths) {
-    if (fs.existsSync(p)) {
-      npxCliPath = p;
-      break;
-    }
-  }
-
-  // Create node wrapper script
-  const nodeWrapper = `#!/bin/bash
-exec "${electronExe}" "$@"
-`;
-
-  // Create npm wrapper script
-  const npmWrapper = npmCliPath
-    ? `#!/bin/bash
-exec "${electronExe}" "${npmCliPath}" "$@"
-`
-    : `#!/bin/bash
-echo "npm not found in bundled dependencies"
-exit 1
-`;
-
-  // Create npx wrapper script
-  const npxWrapper = npxCliPath
-    ? `#!/bin/bash
-exec "${electronExe}" "${npxCliPath}" "$@"
-`
-    : `#!/bin/bash
-echo "npx not found in bundled dependencies"
-exit 1
-`;
-
-  try {
-    fs.writeFileSync(path.join(binDir, 'node'), nodeWrapper, { mode: 0o755 });
-    fs.writeFileSync(path.join(binDir, 'npm'), npmWrapper, { mode: 0o755 });
-    fs.writeFileSync(path.join(binDir, 'npx'), npxWrapper, { mode: 0o755 });
-
-    electronBinPath = binDir;
-    console.log('[RUNTIME] Created Electron Node.js wrappers at:', binDir);
-    if (npmCliPath) console.log('[RUNTIME] npm-cli.js found at:', npmCliPath);
-    if (npxCliPath) console.log('[RUNTIME] npx-cli.js found at:', npxCliPath);
-
-    return binDir;
-  } catch (err) {
-    console.error('[RUNTIME] Failed to create wrapper scripts:', err.message);
-    return null;
-  }
-}
-
-function getEnvWithElectronNode(baseEnv = {}) {
-  const binDir = setupElectronNodeWrappers();
-  if (!binDir) {
-    return baseEnv;
-  }
-
-  const currentPath = baseEnv.PATH || process.env.PATH || '';
-  return {
-    ...baseEnv,
-    PATH: `${binDir}:${currentPath}`,
-    ELECTRON_RUN_AS_NODE: '1',
-  };
-}
 
 function safeSerialize(value, depth = 0) {
   if (depth > 5) {
@@ -365,14 +241,8 @@ export class AgentRuntime extends EventEmitter {
     this.pendingSessionEvents = [];
     this.pendingSessionMetadata = null;
     this.pendingUsage = [];
-    this.diffManager = null; // Injected by bridge server for diff approval flow
-
-    // Screen sharing state
-    this.isScreenSharingActive = false;
-    this.anthropicClient = null; // Lazy-initialized for Haiku calls
-    this.pendingScreenContext = null; // Buffer for screen context before session is created
-    this.currentScreenshot = null; // Latest screenshot from main process
-
+    // Model used for cost tracking
+    this.model = null;
     // Query abort controller for stop functionality
     this.currentAbortController = null;
 
@@ -642,35 +512,205 @@ The agent will run automatically according to the schedule. The user can view an
               };
             }
           }
+        },
+        // ── Media tools (in-process, using provider adapters) ──────────
+        {
+          name: 'text_to_speech',
+          description: `Convert text to natural-sounding speech audio. Saves an audio file to the workspace.
+
+Supported providers (auto-selected based on available API keys):
+- ElevenLabs (highest quality, most expressive)
+- OpenAI
+- Google
+
+Available voices for ElevenLabs: rachel, drew, paul, sarah, emily, charlie, adam, alice, lily.
+Available voices for OpenAI: alloy, echo, fable, onyx, nova, shimmer.`,
+          inputSchema: {
+            text: z.string().describe('The text to convert to speech'),
+            voice: z.string().optional().describe('Voice name (e.g., "rachel", "adam", "alloy"). Defaults to "rachel" for ElevenLabs, "alloy" for OpenAI.'),
+            provider: z.enum(['elevenlabs', 'openai', 'google']).optional().describe('TTS provider. Auto-selects if omitted based on available API keys.'),
+          },
+          handler: async (args) => {
+            try {
+              const { text, voice, provider: requestedProvider } = args;
+              if (!text) {
+                return { content: [{ type: 'text', text: 'Error: text is required.' }], isError: true };
+              }
+
+              // Lazy-load provider registry
+              const { default: ProviderRegistry, CAPABILITIES } = await import('../../providers/ProviderRegistry.js');
+              const registry = new ProviderRegistry();
+              const providerId = registry.resolveProvider(CAPABILITIES.TTS, requestedProvider);
+              if (!providerId) {
+                return { content: [{ type: 'text', text: 'Error: No TTS provider available. Set ELEVENLABS_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.' }], isError: true };
+              }
+
+              const adapter = await registry.getAdapter(providerId);
+              const result = await adapter.textToSpeech({
+                text,
+                voice,
+                outputDir: self.workspacePath,
+              });
+
+              const filePath = result.path || path.join(self.workspacePath, 'audio', `tts_${Date.now()}.mp3`);
+
+              // If adapter returned buffer but no path, save it
+              if (!result.path && result.buffer) {
+                const dir = path.join(self.workspacePath, 'audio');
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, result.buffer);
+              }
+
+              // Track cost
+              const cost = adapter.estimateCost('tts', { text });
+              if (cost > 0) {
+                costTracker.recordProviderCost(self.currentSessionId, {
+                  provider: providerId,
+                  capability: 'tts',
+                  cost,
+                });
+              }
+
+              self.log(`[MEDIA] TTS complete: ${providerId}, voice: ${result.metadata?.voice || 'default'}, file: ${filePath}`);
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Audio saved to: ${filePath}\nProvider: ${providerId}\nVoice: ${result.metadata?.voice || 'default'}\nEstimated cost: $${cost.toFixed(4)}`
+                }]
+              };
+            } catch (error) {
+              self.log(`[MEDIA] TTS error: ${error.message}`);
+              return { content: [{ type: 'text', text: `Error generating speech: ${error.message}` }], isError: true };
+            }
+          }
+        },
+        {
+          name: 'generate_image',
+          description: `Generate an image from a text prompt. Saves the image file to the workspace.
+
+Supported providers (auto-selected based on available API keys):
+- OpenAI (gpt-image-1)
+- Google (Imagen 4)`,
+          inputSchema: {
+            prompt: z.string().describe('Detailed description of the image to generate'),
+            provider: z.enum(['openai', 'google']).optional().describe('Image provider. Auto-selects if omitted.'),
+            size: z.string().optional().describe('Image size for OpenAI: "1024x1024", "1024x1536", "1536x1024"'),
+            quality: z.enum(['low', 'medium', 'high']).optional().describe('Image quality for OpenAI'),
+            aspect_ratio: z.string().optional().describe('Aspect ratio for Google: "1:1", "16:9", "9:16"'),
+          },
+          handler: async (args) => {
+            try {
+              const { prompt: imagePrompt, provider: requestedProvider, size, quality, aspect_ratio } = args;
+              if (!imagePrompt) {
+                return { content: [{ type: 'text', text: 'Error: prompt is required.' }], isError: true };
+              }
+
+              const { default: ProviderRegistry, CAPABILITIES } = await import('../../providers/ProviderRegistry.js');
+              const registry = new ProviderRegistry();
+              const providerId = registry.resolveProvider(CAPABILITIES.IMAGE_GEN, requestedProvider);
+              if (!providerId) {
+                return { content: [{ type: 'text', text: 'Error: No image generation provider available. Set OPENAI_API_KEY or GOOGLE_API_KEY.' }], isError: true };
+              }
+
+              const adapter = await registry.getAdapter(providerId);
+              const result = await adapter.generateImage({
+                prompt: imagePrompt,
+                size,
+                quality,
+                aspectRatio: aspect_ratio,
+                n: 1,
+                outputDir: self.workspacePath,
+              });
+
+              const cost = adapter.estimateCost('image-gen', { quality });
+              if (cost > 0) {
+                costTracker.recordProviderCost(self.currentSessionId, {
+                  provider: providerId,
+                  capability: 'image-gen',
+                  cost,
+                });
+              }
+
+              // Handle OpenAI response (returns data array with base64/url)
+              if (result.data) {
+                const imgDir = path.join(self.workspacePath, 'images');
+                fs.mkdirSync(imgDir, { recursive: true });
+                const paths = [];
+                for (let i = 0; i < result.data.length; i++) {
+                  const item = result.data[i];
+                  const filePath = path.join(imgDir, `img_${Date.now()}_${i}.png`);
+                  if (item.b64_json) {
+                    fs.writeFileSync(filePath, Buffer.from(item.b64_json, 'base64'));
+                  } else if (item.url) {
+                    const resp = await fetch(item.url);
+                    fs.writeFileSync(filePath, Buffer.from(await resp.arrayBuffer()));
+                  }
+                  paths.push(filePath);
+                }
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `Image saved to: ${paths.join(', ')}\nProvider: ${providerId}\nEstimated cost: $${cost.toFixed(4)}`
+                  }]
+                };
+              }
+
+              // Handle Google response (returns path directly)
+              const filePath = result.path || (Array.isArray(result) ? result[0]?.path : null);
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Image saved to: ${filePath}\nProvider: ${providerId}\nEstimated cost: $${cost.toFixed(4)}`
+                }]
+              };
+            } catch (error) {
+              self.log(`[MEDIA] Image generation error: ${error.message}`);
+              return { content: [{ type: 'text', text: `Error generating image: ${error.message}` }], isError: true };
+            }
+          }
+        },
+        {
+          name: 'list_voices',
+          description: 'List available TTS voices for a provider.',
+          inputSchema: {
+            provider: z.enum(['elevenlabs', 'openai']).optional().describe('Which provider to list voices for. Lists all available if omitted.'),
+          },
+          handler: async (args) => {
+            try {
+              const results = [];
+
+              if (!args.provider || args.provider === 'elevenlabs') {
+                if (process.env.ELEVENLABS_API_KEY) {
+                  try {
+                    const { ElevenLabsAdapter } = await import('../providers/adapters/ElevenLabsAdapter.js');
+                    const adapter = new ElevenLabsAdapter();
+                    const voices = await adapter.listVoices();
+                    results.push(`## ElevenLabs (${voices.length} voices)\n${voices.map(v => `- ${v.name} (${v.id})`).join('\n')}`);
+                  } catch (e) {
+                    results.push(`## ElevenLabs\nError: ${e.message}`);
+                  }
+                }
+              }
+
+              if (!args.provider || args.provider === 'openai') {
+                if (process.env.OPENAI_API_KEY) {
+                  results.push(`## OpenAI\n- alloy\n- echo\n- fable\n- onyx\n- nova\n- shimmer`);
+                }
+              }
+
+              if (results.length === 0) {
+                return { content: [{ type: 'text', text: 'No TTS providers available. Set ELEVENLABS_API_KEY or OPENAI_API_KEY.' }] };
+              }
+
+              return { content: [{ type: 'text', text: results.join('\n\n') }] };
+            } catch (error) {
+              return { content: [{ type: 'text', text: `Error listing voices: ${error.message}` }], isError: true };
+            }
+          }
         }
       ]
     });
-  }
-
-  /**
-   * Get or create Anthropic client for direct API calls (Haiku analysis)
-   */
-  getAnthropicClient() {
-    if (!this.anthropicClient) {
-      this.anthropicClient = new Anthropic();
-    }
-    return this.anthropicClient;
-  }
-
-  /**
-   * Set screen sharing state (called from main process)
-   * @param {boolean} isActive - Whether screen sharing is currently active
-   */
-  setScreenSharingState(isActive) {
-    this.isScreenSharingActive = Boolean(isActive);
-    this.log(`[SCREEN] Screen sharing state: ${this.isScreenSharingActive ? 'ACTIVE' : 'INACTIVE'}`);
-
-    // Clear screen context when sharing stops
-    if (!isActive && this.sessionStore && this.currentSessionId) {
-      this.sessionStore.clearScreenContext(this.currentSessionId).catch(err => {
-        this.log(`[SCREEN] Failed to clear screen context: ${err.message}`);
-      });
-    }
   }
 
   // =============================================================================
@@ -874,10 +914,6 @@ Be specific about text content you can read. Keep the description under 500 word
     });
   }
 
-  setDiffManager(diffManager) {
-    this.diffManager = diffManager;
-  }
-
   log(message) {
     console.error(message);
   }
@@ -1077,6 +1113,16 @@ You have deep knowledge in:
 - **Stay focused**: Complete the task efficiently without over-engineering
 - **Explain decisions**: Share your reasoning when making design or architecture choices
 
+## Scheduling & Automation
+You have built-in tools for scheduling and automation:
+- **Scheduled Agents**: You can create scheduled agents using the \`create_scheduled_agent\` tool. These run autonomously on a cron schedule (e.g., "every morning at 9am", "every hour", "every Monday at 8am").
+- **Webhooks**: The runtime supports webhook triggers — when an HTTP webhook fires (e.g., from GitHub, Slack, or any service), it can automatically run an agent.
+- **Chain Triggers**: Agents can be chained — when one agent finishes, another can start automatically.
+- **File Watchers**: Agents can be triggered by filesystem changes.
+- **Manual Triggers**: Agents can be triggered on demand via the API.
+
+When a user asks about automating tasks, scheduling recurring work, or reacting to events/webhooks, explain these capabilities and help them set up the automation using the \`create_scheduled_agent\` tool.
+
 ## Web Search Tools
 Choose the right tool for the search task:
 - **WebSearch/WebFetch** (default): Use for simple queries like weather, quick facts, current events, simple lookups
@@ -1107,38 +1153,11 @@ MANDATORY TOOL USAGE:
 - Edit file → Edit tool REQUIRED
 - Run command → Bash tool REQUIRED
 - Read file → Read tool REQUIRED
-- set_preview_url → REQUIRED for web app previews
 
 TOOL USAGE:
 - File operations: ALWAYS use Write tool with workspace path (not Bash echo, not description)
 - Command execution: ALWAYS use Bash tool (not explanation)
 - Data analysis: ALWAYS save results as CSV using Write tool in the workspace
-
-## PREVIEW WORKFLOW (CRITICAL - Use these tools)
-
-When user asks to "run preview", "start dev server", "show me the app", or "generate preview":
-
-**USE THE start_preview TOOL - ONE STEP ONLY:**
-\`\`\`
-start_preview()
-\`\`\`
-
-That's it! The system automatically:
-- Detects project type (Next.js, Vite, CRA, etc.)
-- Finds an available port
-- Starts the appropriate dev command
-- Updates the preview pane with the URL
-
-**Other preview tools:**
-- \`stop_preview()\` - Stop the dev server
-- \`restart_preview()\` - Restart after code changes
-- \`set_preview_url({ url })\` - Only if you need a different URL
-
-**DO NOT use bash commands for preview!**
-- ❌ Don't run \`npm run dev\` via bash
-- ❌ Don't use lsof/netstat/ps to find ports
-- ❌ Don't kill processes manually
-- ✅ Use start_preview, stop_preview, restart_preview tools
 
 STAY FOCUSED: If you find yourself doing more than 2-3 steps for a simple request, you're overcomplicating it.
 `;
@@ -1228,22 +1247,6 @@ STAY FOCUSED: If you find yourself doing more than 2-3 steps for a simple reques
         }
       } catch (error) {
         this.log(`[FRIDAY] Failed to load skills: ${error.message}`);
-      }
-
-      // Add screen sharing instructions if active (DYNAMIC - at end)
-      if (this.isScreenSharingActive) {
-        systemPrompt += `\n\n## Screen Sharing\n`;
-        systemPrompt += `The user has enabled screen sharing. You have access to their screen context.\n`;
-        systemPrompt += `IMPORTANT: When you receive screen context, ALWAYS start your response by briefly acknowledging what you see:\n`;
-        systemPrompt += `- Example: "I can see you have VS Code open with a JavaScript file..." then continue to address their question\n`;
-        systemPrompt += `- Example: "Looking at your screen, I see a web browser showing..." then provide your help\n`;
-        systemPrompt += `- This confirms to the user that you're seeing their actual screen content\n\n`;
-        systemPrompt += `Screen context guidelines:\n`;
-        systemPrompt += `- On the first message, you automatically receive an analysis of their current screen\n`;
-        systemPrompt += `- For follow-up messages, use the provided screen context unless it seems outdated\n`;
-        systemPrompt += `- Call the screenshot tool ONLY when you need to see what changed (e.g., user says "now", "after that", or context seems stale)\n`;
-        systemPrompt += `- The screenshot tool returns a TEXT description (analyzed by a vision model), not raw images\n`;
-        systemPrompt += `- Reference specific UI elements, text, or content mentioned in the screen analysis\n`;
       }
 
       return {
@@ -1584,45 +1587,31 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
   }
 
  async handlePermissionGate({ toolName, toolInput, suggestions, signal, toolUseID }) {
-
-    console.error(`[PERMISSION CHECK] AI wants to use tool: "${toolName}"`);
-    this.log(`[PERMISSION CHECK] >>> Checking: ${JSON.stringify(toolName)}`);
-
     const cleanName = (toolName || '').trim();
-    // Whitelist tools that never need permission
-    const SAFE_TOOLS = [
-      // Preview tools
-      'mcp__terminal__set_preview_url',
-      'mcp__terminal__start_preview',
-      'mcp__terminal__stop_preview',
-      'mcp__terminal__restart_preview',
-      'mcp__terminal__list_processes',
-      // Screen capture tools - auto-approved because:
-      // 1. User already gave permission when they clicked "Share Screen"
-      // 2. The capture will fail if screen sharing is not active anyway
-      // 3. No repeated permission dialogs for each screenshot
-      'mcp__screen__screenshot',
-      'mcp__screen__screen_status'
-    ];
 
-    if (SAFE_TOOLS.includes(cleanName)) {
-      console.error(`[PERMISSION] 🟢 Auto-approving safe tool: ${cleanName}`);
-      return {
-        behavior: 'allow',
-        updatedInput: toolInput
-      };
+    // =========================================================================
+    // PERMISSION MANAGER: Check profile + overrides + session approvals
+    // =========================================================================
+    const filePath = toolInput?.file_path || toolInput?.path || null;
+    const permCheck = permissionManager.check(cleanName, {
+      workspacePath: this.workspacePath,
+      filePath,
+    });
+
+    if (permCheck.decision === PERMISSION.AUTO_APPROVE) {
+      this.log(`[PERMISSION] Auto-approved (${permCheck.source}): ${cleanName}`);
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
-    // =========================================================================
-    // PERMISSION CACHING: Check if tool has cached approval
-    // =========================================================================
+    if (permCheck.decision === PERMISSION.DENY) {
+      this.log(`[PERMISSION] Denied (${permCheck.source}): ${cleanName}`);
+      return { behavior: 'deny', message: `Tool denied by ${permCheck.source} policy`, interrupt: false };
+    }
+
+    // Legacy cache check (GlobalConfig-based "always allow")
     const cachedPermission = this.checkCachedPermission(cleanName);
     if (cachedPermission?.approved) {
-      console.error(`[PERMISSION] 🟢 Auto-approved via cache (${cachedPermission.level}): ${cleanName}`);
-      return {
-        behavior: 'allow',
-        updatedInput: toolInput
-      };
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
     if (this.currentQueryMetadata?.batchMode) {
@@ -1772,6 +1761,7 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     this.pendingUsage = [];
     // Clear session-level permission approvals (but keep persistent "always allow")
     this.sessionApprovals.clear();
+    permissionManager.clearSessionApprovals();
     this.log('[PERMISSION] Session approvals cleared');
   }
 
@@ -1814,6 +1804,9 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     // Build system prompt with skills (agent routing commented out)
     const { systemPrompt, model: agentModel, agentName } = await this.buildAgentSystemPrompt(metadata, userMessage);
 
+    // Store model for cost tracking
+    this.model = agentModel || 'claude-sonnet-4-5';
+
     // Log that Friday is handling the request
     this.emitMessage({ type: 'info', message: `${agentName} is processing your request...` });
 
@@ -1848,19 +1841,9 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
         this.handlePermissionGate({ toolName, toolInput, suggestions, signal, toolUseID }),
       mcpServers: allMcpServers,
       systemPrompt,
-      env: getEnvWithElectronNode(process.env),
+      env: process.env,
       stderr: (data) => {
-        // Log SDK stderr for debugging MCP connection issues
         this.log(`[SDK stderr] ${data.trim()}`);
-      },
-      spawnClaudeCodeProcess: (options) => {
-        const cmd = options.command === 'node' ? process.execPath : options.command;
-        const envWithNode = getEnvWithElectronNode(options.env);
-        return spawn(cmd, options.args, {
-          cwd: options.cwd,
-          env: envWithNode,
-          stdio: ['pipe', 'pipe', 'pipe']
-        });
       }
     };
 
@@ -1873,68 +1856,7 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
       this.skipNextResume = false; // Clear flag after first query
     }
 
-    // Handle screen context - use Haiku for analysis, then include text only
-    let screenContextText = null;
-    const screenshot = metadata?.screenshot;
-
-    if (screenshot && screenshot.image && this.isScreenSharingActive) {
-      // Store screenshot for later use by screenshot tool
-      this.currentScreenshot = screenshot;
-
-      // Check if we have existing context (from session or pending buffer)
-      let existingContext = this.pendingScreenContext; // Check buffer first
-
-      if (!existingContext && this.sessionStore && this.currentSessionId) {
-        try {
-          const screenData = await this.sessionStore.getScreenContext(this.currentSessionId);
-          existingContext = screenData?.context;
-        } catch (err) {
-          this.log(`[SCREEN] Failed to get existing context: ${err.message}`);
-        }
-      }
-
-      // Only auto-analyze on FIRST query (when no context exists)
-      // Agent can call screenshot tool to refresh when it decides to
-      if (!existingContext) {
-        // Call Haiku for initial screen analysis (cheap)
-        try {
-          const analysis = await this.analyzeScreenWithHaiku(screenshot);
-          screenContextText = analysis;
-
-          // Store the analysis (to session if available, otherwise buffer it)
-          if (this.sessionStore && this.currentSessionId) {
-            await this.sessionStore.updateScreenContext(this.currentSessionId, analysis);
-            this.pendingScreenContext = null; // Clear buffer
-            this.log('[SCREEN] Stored initial screen analysis in session');
-          } else {
-            // Buffer for later when session is created
-            this.pendingScreenContext = analysis;
-            this.log('[SCREEN] Buffered initial screen analysis (session not yet created)');
-          }
-        } catch (error) {
-          this.log(`[SCREEN] Initial analysis failed, continuing without: ${error.message}`);
-        }
-      } else {
-        // Use existing context (no new image sent to any model)
-        // Agent can call screenshot tool if it wants fresh analysis
-        screenContextText = existingContext;
-        this.log('[SCREEN] Using cached screen analysis (agent can call screenshot tool to refresh)');
-        this.emitMessage({ type: 'info', message: 'Using current screen context' });
-      }
-
-      // Mark that this session has used screen sharing
-      if (this.sessionStore && this.currentSessionId) {
-        this.sessionStore.updateMetadata(this.currentSessionId, { hasUsedScreenShare: true }).catch(() => {});
-      }
-    }
-
-    // Build the prompt - text only (screen context included in system prompt)
-    let prompt = userMessage;
-    if (screenContextText) {
-      // Prepend screen context to the user message
-      prompt = `[Current Screen Context]\n${screenContextText}\n\n[User Message]\n${userMessage}`;
-    }
-
+    const prompt = userMessage;
     let messageSessionId = null;
     let fullResponse = '';
 
@@ -1967,14 +1889,6 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
           messageSessionId = message.session_id;
           this.currentSessionId = message.session_id;
           this.emitMessage({ type: 'session', session_id: message.session_id });
-
-          // Flush any pending screen context now that we have a session
-          if (this.pendingScreenContext && this.sessionStore) {
-            this.sessionStore.updateScreenContext(message.session_id, this.pendingScreenContext)
-              .then(() => this.log('[SCREEN] Flushed pending screen context to session'))
-              .catch(err => this.log(`[SCREEN] Failed to flush pending context: ${err.message}`));
-            this.pendingScreenContext = null;
-          }
         }
         const appended = await this.routeAgentMessage(message, queryContext, fullResponse);
         if (appended) {
@@ -2076,15 +1990,33 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
           is_error: message.is_error || false
         });
         break;
-      case 'usage':
-        if (message.usage) {
-          this.emitMessage({ type: 'usage', usage: message.usage });
+      case 'usage': {
+        // SDK may send usage as message.usage or directly on message
+        const usageData = message.usage || (message.input_tokens != null ? message : null);
+        if (usageData) {
+          costTracker.recordTokenUsage(this.currentSessionId, usageData, this.model);
+          this.emitMessage({ type: 'usage', usage: usageData });
         }
         break;
+      }
       case 'result':
         if (message.subtype === 'success') {
+          // Capture usage from result message if present (SDK often embeds it here)
+          const resultUsage = message.usage || message.result?.usage;
+          if (resultUsage && resultUsage.input_tokens != null) {
+            costTracker.recordTokenUsage(this.currentSessionId, resultUsage, this.model);
+          }
           await this.handleSuccessResult(queryContext, fullResponse);
-          this.emitMessage({ type: 'complete', result: message.result, session_id: this.currentSessionId });
+          const sessionCost = costTracker.getSessionCost(this.currentSessionId);
+          this.emitMessage({
+            type: 'complete',
+            result: message.result,
+            session_id: this.currentSessionId,
+            cost: {
+              tokens: sessionCost.tokens,
+              estimated: sessionCost.totalCost,
+            },
+          });
         }
         break;
       default:
@@ -2166,17 +2098,6 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
       }
     });
 
-    if (toolName === 'activate_terminal' || toolName === 'execute_command') {
-      this.emitMessage({ type: 'activate_tool', tool: 'terminal', params: {} });
-      if (toolName === 'execute_command') {
-        this.emitMessage({
-          type: 'tool_command',
-          tool: 'terminal',
-          command: 'execute',
-          params: message.input || {}
-        });
-      }
-    }
     this.emitMessage({
       type: 'tool_use',
       tool_name: toolName,
@@ -2190,53 +2111,6 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     // Clear thinking state when query completes
     this.emitMessage({ type: 'thinking_complete' });
 
-    const usedWriteTool = queryContext.toolUses.some((t) =>
-      t.name === 'Write' || t.name === 'write' || t.name === 'filewrite'
-    );
-    const mentionedFileCreation = fullResponse.match(/(created|made|generated).*(\.csv|\.txt|\.json|\.html|\.js)/i);
-    if (mentionedFileCreation && !usedWriteTool) {
-      this.emitMessage({
-        type: 'error',
-        message: 'Tool validation failed: You mentioned creating a file but did not use the Write tool. Please actually use the Write tool to create the file.'
-      });
-    }
-    try {
-      console.error('[RUNTIME] 🔍 Starting preview detection...');
-      const preview = detectPreview(queryContext, this.workspacePath);
-
-      if (preview) {
-        console.error(`[RUNTIME] ✅ Preview detected: ${JSON.stringify(preview)}`);
-      } else {
-        console.error('[RUNTIME] ❌ No preview detected in this turn.');
-      }
-
-      if (preview && preview.autoOpen) {
-        if (preview.type === 'start_preview') {
-          // Signal to start PreviewService for a specific directory
-          console.error(`[RUNTIME] 📁 Emitting start_preview for directory: ${preview.directory}`);
-          this.emitMessage({
-            type: 'start_preview',
-            directory: preview.directory
-          });
-        } else if (preview.type === 'web' && preview.url) {
-          // Direct URL - navigate to it
-          console.error(`[RUNTIME] 🚀 Emitting activate_tool for URL: ${preview.url}`);
-          this.emitMessage({
-            type: 'activate_tool',
-            tool: 'browser',
-            params: { url: preview.url, autoOpen: true }
-          });
-          this.emitMessage({
-            type: 'tool_command',
-            tool: 'browser',
-            command: 'navigate',
-            params: { url: preview.url }
-          });
-        }
-      }
-    } catch (error) {
-      this.log(`[PREVIEW] Error: ${error.message}`);
-    }
     const promptedRules = this.evaluateAutomationRules(queryContext);
     for (const prompt of promptedRules) {
       const promptId = this.generateRulePromptId(prompt.rule.id);
@@ -2285,31 +2159,6 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     if (!resolvedPath) {
       throw new Error('Missing file_path for FileWrite');
     }
-
-    const relativePath = path.relative(this.workspacePath, resolvedPath);
-    let originalContent = null;
-    try {
-      originalContent = await fsPromises.readFile(resolvedPath, 'utf8');
-    } catch {
-      // File doesn't exist - this is a new file
-    }
-
-    // Emit diff request for bridge server to handle
-    this.emitMessage({
-      type: 'diff_request',
-      files: [{
-        path: relativePath,
-        original: originalContent,
-        modified: input.content ?? ''
-      }],
-      toolExecutionId: queryContext?.toolUseId || null,
-      metadata: {
-        toolName: 'Write',
-        sessionId: this.currentSessionId,
-        commitMessage: `Agent: Create/update ${path.basename(resolvedPath)}`
-      }
-    });
-
     this.registerCreatedFile(queryContext, resolvedPath, 'filewrite');
     return resolvedPath;
   }
@@ -2319,47 +2168,6 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     if (!resolvedPath) {
       throw new Error('Missing file_path for FileEdit');
     }
-    const oldString = input.old_string ?? '';
-    const newString = input.new_string ?? '';
-    if (!oldString) {
-      throw new Error('FileEdit missing old_string');
-    }
-    let existingContent;
-    try {
-      existingContent = await fsPromises.readFile(resolvedPath, 'utf8');
-    } catch (error) {
-      this.log(`[DEBUG] Failed to read ${resolvedPath} before edit: ${error.message}`);
-      return null;
-    }
-    let updatedContent;
-    if (input.replace_all) {
-      updatedContent = existingContent.split(oldString).join(newString);
-    } else {
-      updatedContent = existingContent.replace(oldString, newString);
-    }
-    if (updatedContent === existingContent) {
-      this.log(`[DEBUG] FileEdit made no changes to ${resolvedPath}`);
-      return null;
-    }
-
-    const relativePath = path.relative(this.workspacePath, resolvedPath);
-
-    // Emit diff request for bridge server to handle
-    this.emitMessage({
-      type: 'diff_request',
-      files: [{
-        path: relativePath,
-        original: existingContent,
-        modified: updatedContent
-      }],
-      toolExecutionId: queryContext?.toolUseId || null,
-      metadata: {
-        toolName: 'Edit',
-        sessionId: this.currentSessionId,
-        commitMessage: `Agent: Edit ${path.basename(resolvedPath)}`
-      }
-    });
-
     this.registerCreatedFile(queryContext, resolvedPath, 'fileedit');
     return resolvedPath;
   }
@@ -2376,10 +2184,7 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
       this.recordToolUse(queryContext, toolName, toolInput, toolUseId);
       if (['filewrite', 'write', 'createfile'].includes(normalizedName)) {
         if (toolInput.file_path && typeof toolInput.content === 'string') {
-          const resolvedPath = await this.persistFileWrite(toolInput, queryContext);
-          if (resolvedPath && resolvedPath.toLowerCase().endsWith('.csv')) {
-            await handleAGGridFile(resolvedPath);
-          }
+          await this.persistFileWrite(toolInput, queryContext);
           if (toolUseId) this.handledToolUseIds.add(toolUseId);
         }
       } else if (['fileedit', 'editfile', 'edit'].includes(normalizedName)) {
@@ -2388,15 +2193,7 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
           typeof toolInput.old_string === 'string' &&
           typeof toolInput.new_string === 'string'
         ) {
-          const resolvedPath = await this.persistFileEdit(toolInput, queryContext);
-          if (resolvedPath && resolvedPath.toLowerCase().endsWith('.csv')) {
-            this.emitMessage({
-              type: 'tool_command',
-              tool: 'spreadsheet',
-              command: 'load',
-              params: { path: resolvedPath }
-            });
-          }
+          await this.persistFileEdit(toolInput, queryContext);
           if (toolUseId) this.handledToolUseIds.add(toolUseId);
         }
       }
@@ -2429,6 +2226,10 @@ STAY FOCUSED: Complete tasks efficiently using the appropriate tools.`,
     // Store permission approval based on level (if approved)
     if (approved && toolName) {
       const permissionLevel = data.permission_level || 'once';
+      // Also store in PermissionManager for session-level approvals
+      if (permissionLevel === 'session' || permissionLevel === 'always') {
+        permissionManager.addSessionApproval(toolName);
+      }
       const storeResult = this.storePermissionApproval(
         toolName,
         permissionLevel,

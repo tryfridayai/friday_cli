@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import McpCredentials from './mcp/McpCredentials.js';
+import { PluginManager } from './plugins/PluginManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,8 +125,12 @@ function writeGoogleDriveCredentialsFile(normalized) {
   }
 }
 
-async function loadMcpServers(workspacePath, mcpCredentials) {
-  const templateContext = {
+/**
+ * Build the template context used for resolving ${VAR} placeholders
+ * in MCP server configs.
+ */
+function buildTemplateContext(workspacePath) {
+  return {
     WORKSPACE: workspacePath,
     HOME: os.homedir() || workspacePath,
     PATH: process.env.PATH || '',
@@ -134,71 +139,116 @@ async function loadMcpServers(workspacePath, mcpCredentials) {
     NODE_MODULES: path.join(projectRoot, 'node_modules'),
     NODE_BIN: process.execPath
   };
+}
+
+/**
+ * Load core MCP servers (filesystem, terminal) from .mcp.json.
+ * These always load regardless of plugins.
+ */
+function loadCoreServers(templateContext) {
   const configPath = path.join(projectRoot, '.mcp.json');
   try {
     const raw = fs.readFileSync(configPath, 'utf8');
     const parsed = JSON.parse(raw);
     if (parsed.mcpServers) {
-      // Merge user-defined servers (user entries override built-in on same ID)
-      const userServers = loadUserMcpServers();
-      const merged = { ...parsed.mcpServers, ...userServers };
-
-      const normalized = normalizeMcpServerConfig(merged, templateContext);
-
-      if (mcpCredentials) {
-        const mergers = Object.keys(normalized).map(async (serverId) => {
-          const credEnv = await mcpCredentials.getEnvironmentForServer(serverId, normalized[serverId].auth);
-          normalized[serverId].env = {
-            ...normalized[serverId].env,
-            ...credEnv
-          };
-          // Re-resolve args templates using credential env vars
-          // (e.g., --access-token ${SUPABASE_PAT} where PAT comes from keytar)
-          if (normalized[serverId].args?.length && Object.keys(credEnv).length) {
-            normalized[serverId].args = normalized[serverId].args.map((arg) => {
-              if (typeof arg !== 'string') return arg;
-              return arg.replace(/\$\{([^}]+)\}/g, (match, key) => credEnv[key] || match);
-            });
-          }
-        });
-        await Promise.all(mergers);
-
-        // Supabase: append --read-only / --project-ref based on stored mode
-        const supabaseConfig = normalized['supabase'];
-        if (supabaseConfig) {
-          const mode = supabaseConfig.env.SUPABASE_MODE;
-          const projectRef = supabaseConfig.env.SUPABASE_PROJECT_REF;
-          if (mode === 'readonly') {
-            supabaseConfig.args.push('--read-only');
-          }
-          if (projectRef && projectRef.trim()) {
-            supabaseConfig.args.push('--project-ref', projectRef.trim());
-          }
+      // Only extract core servers
+      const coreIds = PluginManager.getCoreServerIds();
+      const coreConfigs = {};
+      for (const id of coreIds) {
+        if (parsed.mcpServers[id]) {
+          coreConfigs[id] = parsed.mcpServers[id];
         }
-
-        // Google Drive: write OAuth credentials to the JSON file the server expects
-        await writeGoogleDriveCredentialsFile(normalized);
       }
-
-      return normalized;
+      return normalizeMcpServerConfig(coreConfigs, templateContext);
     }
   } catch (error) {
-    console.error(`[CONFIG] Failed to load .mcp.json (using defaults): ${error.message}`);
+    console.error(`[CONFIG] Failed to load .mcp.json: ${error.message}`);
   }
 
-  // Fallback: use bundled filesystem server with Electron's Node.js
+  // Fallback: bundled filesystem server
   return {
     filesystem: {
       command: process.execPath,
-     args: [
+      args: [
         path.join(projectRoot, 'node_modules', '@modelcontextprotocol', 'server-filesystem', 'dist', 'index.js'),
-        workspacePath
+        templateContext.WORKSPACE
       ],
       env: {
-        ALLOWED_PATHS: workspacePath
+        ALLOWED_PATHS: templateContext.WORKSPACE
       }
     }
   };
+}
+
+/**
+ * Load MCP servers: core servers + installed plugins + user overrides.
+ *
+ * Core servers (filesystem, terminal) always load from .mcp.json.
+ * Plugin servers load from installed plugins (via PluginManager).
+ * User-defined servers from ~/.friday/user-mcp-servers.json are merged last.
+ */
+async function loadMcpServers(workspacePath, mcpCredentials) {
+  const templateContext = buildTemplateContext(workspacePath);
+
+  // 1. Core servers (always loaded)
+  const coreServers = loadCoreServers(templateContext);
+
+  // 2. Installed plugin servers
+  const pm = new PluginManager();
+  const pluginServers = pm.getInstalledMcpServers(templateContext);
+
+  // 3. User-defined servers (overrides)
+  const userServers = loadUserMcpServers();
+  const userNormalized = normalizeMcpServerConfig(userServers, templateContext);
+
+  // Merge: core + plugins + user (user overrides plugins, plugins override core)
+  const merged = { ...coreServers, ...pluginServers, ...userNormalized };
+
+  // Apply credentials from McpCredentials store (legacy keytar-based)
+  if (mcpCredentials) {
+    // Load .mcp.json for auth definitions (needed for credential env mapping)
+    let authDefs = {};
+    try {
+      const configPath = path.join(projectRoot, '.mcp.json');
+      const raw = fs.readFileSync(configPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed.mcpServers) {
+        for (const [id, def] of Object.entries(parsed.mcpServers)) {
+          if (def.auth) authDefs[id] = def.auth;
+        }
+      }
+    } catch { /* ignore */ }
+
+    const mergers = Object.keys(merged).map(async (serverId) => {
+      const auth = authDefs[serverId] || merged[serverId].auth;
+      if (!auth) return;
+      const credEnv = await mcpCredentials.getEnvironmentForServer(serverId, auth);
+      merged[serverId].env = { ...merged[serverId].env, ...credEnv };
+      // Re-resolve args templates using credential env vars
+      if (merged[serverId].args?.length && Object.keys(credEnv).length) {
+        merged[serverId].args = merged[serverId].args.map((arg) => {
+          if (typeof arg !== 'string') return arg;
+          return arg.replace(/\$\{([^}]+)\}/g, (match, key) => credEnv[key] || match);
+        });
+      }
+    });
+    await Promise.all(mergers);
+
+    // Supabase: append --read-only / --project-ref based on stored mode
+    if (merged['supabase']) {
+      const mode = merged['supabase'].env.SUPABASE_MODE;
+      const projectRef = merged['supabase'].env.SUPABASE_PROJECT_REF;
+      if (mode === 'readonly') merged['supabase'].args.push('--read-only');
+      if (projectRef?.trim()) merged['supabase'].args.push('--project-ref', projectRef.trim());
+    }
+
+    // Google Drive: write OAuth credentials file
+    if (merged['google-drive']) {
+      await writeGoogleDriveCredentialsFile(merged);
+    }
+  }
+
+  return merged;
 }
 
 export async function loadBackendConfig(options = {}) {
