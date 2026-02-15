@@ -470,7 +470,11 @@ async function pluginInstallFlow(pm, ctx) {
     const name = pm.getPluginManifest(pluginId).name;
     console.log('');
     console.log(success(`\u2713 ${name} installed successfully!`));
-    console.log(hint('Restart friday chat to activate the plugin.'));
+    console.log('');
+    console.log(hint('To activate the plugin:'));
+    console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+    console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+    console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
     console.log('');
   } catch (err) {
     console.log(errorMsg(`Install failed: ${err.message}`));
@@ -501,7 +505,11 @@ async function pluginUninstallFlow(pm, ctx) {
     pm.uninstall(choice.value);
     console.log('');
     console.log(success(`\u2713 ${choice.label} uninstalled.`));
-    console.log(hint('Restart friday chat to apply changes.'));
+    console.log('');
+    console.log(hint('To apply changes:'));
+    console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+    console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+    console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
     console.log('');
   } catch (err) {
     console.log(errorMsg(`Uninstall failed: ${err.message}`));
@@ -660,7 +668,11 @@ async function cmdKeys(ctx) {
       await setApiKey(selected.key, newValue);
       console.log('');
       console.log(success(`\u2713 ${selected.label} key saved securely to system keychain`));
-      console.log(hint('Restart friday chat for changes to take effect.'));
+      console.log('');
+      console.log(hint('To apply changes:'));
+      console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+      console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+      console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       console.log('');
     } else {
       // Fallback to .env file (less secure, but functional)
@@ -683,7 +695,11 @@ async function cmdKeys(ctx) {
       console.log('');
       console.log(success(`\u2713 ${selected.label} key saved to ~/.friday/.env`));
       console.log(`  ${ORANGE}Note: For better security, install keytar for secure keychain storage${RESET}`);
-      console.log(hint('Restart friday chat for changes to take effect.'));
+      console.log('');
+      console.log(hint('To apply changes:'));
+      console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+      console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+      console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       console.log('');
     }
   } catch (err) {
@@ -732,7 +748,11 @@ async function cmdConfig(ctx) {
         fs.writeFileSync(PERMISSIONS_FILE, JSON.stringify(data, null, 2), 'utf8');
         console.log('');
         console.log(success(`\u2713 Profile changed to ${profileChoice.value}`));
-        console.log(hint('Restart friday chat for changes to take effect.'));
+        console.log('');
+        console.log(hint('To apply changes:'));
+        console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+        console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+        console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       } catch (err) {
         console.log(errorMsg(`Failed to save profile: ${err.message}`));
       }
@@ -753,7 +773,11 @@ async function cmdConfig(ctx) {
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2), 'utf8');
         console.log('');
         console.log(success(`\u2713 Workspace set to ${resolved}`));
-        console.log(hint('Restart friday chat for changes to take effect.'));
+        console.log('');
+        console.log(hint('To apply changes:'));
+        console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+        console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+        console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       } catch (err) {
         console.log(errorMsg(`Failed to set workspace: ${err.message}`));
       }

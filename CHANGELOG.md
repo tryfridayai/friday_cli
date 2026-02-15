@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Fixed
 - **Fixed askSecret function leaking input to readline buffer** - Secret input now properly clears readline buffer before and after collection to prevent API keys from being sent to agent
 - **Fixed API key visibility during paste** - Raw mode is now set before prompt is displayed and input handler is attached first, preventing any key echoing during paste operations
-- **Fixed misleading restart hint messages** - Changed "/new session" hints to "Restart friday chat" since API keys and plugins require a full CLI restart, not just a session reset
+- **Improved restart instructions** - Restart hints now show clear steps: "1. Press Ctrl+C to exit, 2. Run `friday chat` to restart" with note that chat history auto-resumes
 
 #### Security
 - **Fixed API key exposure in agent context** - API keys are now filtered out of environment variables before being passed to the Claude SDK. The agent can no longer access sensitive keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
