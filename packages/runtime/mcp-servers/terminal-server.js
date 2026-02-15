@@ -133,6 +133,53 @@ function checkDangerousCommand(command) {
   return { blocked: false };
 }
 
+// =============================================================================
+// SENSITIVE ENVIRONMENT VARIABLE FILTERING
+// =============================================================================
+// API keys and secrets should NEVER be exposed to commands run by the agent.
+// This filter removes sensitive environment variables from spawned processes.
+// =============================================================================
+
+const SENSITIVE_ENV_PATTERNS = [
+  // API keys for AI providers
+  /^ANTHROPIC_API_KEY$/i,
+  /^OPENAI_API_KEY$/i,
+  /^GOOGLE_API_KEY$/i,
+  /^ELEVENLABS_API_KEY$/i,
+  /^GOOGLE_GENERATIVE_AI_API_KEY$/i,
+  // Common secret patterns
+  /API_KEY$/i,
+  /API_SECRET$/i,
+  /SECRET_KEY$/i,
+  /ACCESS_TOKEN$/i,
+  /PRIVATE_KEY$/i,
+  /AUTH_TOKEN$/i,
+  /PASSWORD$/i,
+  /^AWS_SECRET/i,
+  /^GITHUB_TOKEN$/i,
+  /^NPM_TOKEN$/i,
+  /^FIRECRAWL_API_KEY$/i,
+  /^RESEND_API_KEY$/i,
+  /^BROWSERBASE_API_KEY$/i,
+];
+
+/**
+ * Filter out sensitive environment variables before spawning processes.
+ * Commands run by the agent should never have access to API keys or secrets.
+ * @param {object} env - The process.env object
+ * @returns {object} - Sanitized environment variables
+ */
+function filterSensitiveEnv(env) {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(env)) {
+    const isSensitive = SENSITIVE_ENV_PATTERNS.some(pattern => pattern.test(key));
+    if (!isSensitive) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 // Create server instance
 const server = new Server(
   {
@@ -270,7 +317,7 @@ async function executeCommand(command, workingDirectory = null) {
       cwd: cwd,
       shell: true,
       env: {
-        ...process.env,
+        ...filterSensitiveEnv(process.env),
         FORCE_COLOR: '0', // Disable color codes for cleaner output
         NO_COLOR: '1',
       },

@@ -16,6 +16,9 @@ import {
   maskSecret, groupBy, drawBox,
 } from './ui.js';
 import { runtimeDir } from '../../resolveRuntime.js';
+import {
+  setApiKey, getApiKey, getConfiguredKeys, isSecureStorageAvailable
+} from '../../secureKeyStore.js';
 
 const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
 const ENV_FILE = path.join(CONFIG_DIR, '.env');
@@ -139,8 +142,9 @@ function askQuestion(rl, question) {
  */
 function askSecret(rl, prompt) {
   return new Promise((resolve) => {
-    // Pause readline so we can use raw mode
+    // Fully detach readline so it doesn't echo input
     rl.pause();
+    rl.terminal = false;
 
     process.stdout.write(prompt);
 
@@ -152,39 +156,41 @@ function askSecret(rl, prompt) {
     process.stdin.resume();
 
     const onData = (data) => {
-      const char = data.toString();
-      if (char === '\r' || char === '\n') {
-        // Done
-        process.stdin.removeListener('data', onData);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(wasRaw || false);
+      const str = data.toString();
+      // Process each character individually (handles paste as a single chunk)
+      for (const char of str) {
+        if (char === '\r' || char === '\n') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) {
+            process.stdin.setRawMode(wasRaw || false);
+          }
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve(input);
+          return;
         }
-        process.stdout.write('\n');
-        rl.resume();
-        resolve(input);
-        return;
-      }
-      if (char === '\x03') {
-        // Ctrl+C
-        process.stdin.removeListener('data', onData);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(wasRaw || false);
+        if (char === '\x03') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) {
+            process.stdin.setRawMode(wasRaw || false);
+          }
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve('');
+          return;
         }
-        process.stdout.write('\n');
-        rl.resume();
-        resolve('');
-        return;
-      }
-      if (char === '\x7f' || char === '\b') {
-        // Backspace
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          process.stdout.write('\b \b');
+        if (char === '\x7f' || char === '\b') {
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+          continue;
         }
-        return;
+        input += char;
+        process.stdout.write('*');
       }
-      input += char;
-      process.stdout.write('*');
     };
 
     process.stdin.on('data', onData);
@@ -554,22 +560,58 @@ function cmdModels() {
 }
 
 async function cmdKeys(ctx) {
+  // Check if secure storage is available
+  const secureAvailable = await isSecureStorageAvailable();
+
+  // Get configured keys from secure storage
+  const configuredKeys = getConfiguredKeys();
+
+  // Also check legacy env keys for migration
   const envKeys = readEnvKeys();
 
   const keyInfo = [
-    { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', unlocks: 'Chat (Claude)', value: envKeys.ANTHROPIC_API_KEY },
-    { key: 'OPENAI_API_KEY', label: 'OpenAI', unlocks: 'Chat, Images, Voice, Video', value: envKeys.OPENAI_API_KEY },
-    { key: 'GOOGLE_API_KEY', label: 'Google AI', unlocks: 'Chat, Images, Voice, Video', value: envKeys.GOOGLE_API_KEY },
-    { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', unlocks: 'Premium Voice', value: envKeys.ELEVENLABS_API_KEY },
+    {
+      key: 'ANTHROPIC_API_KEY',
+      label: 'Anthropic',
+      unlocks: 'Chat (Claude)',
+      configured: configuredKeys.ANTHROPIC_API_KEY?.configured || !!envKeys.ANTHROPIC_API_KEY,
+      preview: configuredKeys.ANTHROPIC_API_KEY?.preview || (envKeys.ANTHROPIC_API_KEY ? maskSecret(envKeys.ANTHROPIC_API_KEY) : null),
+    },
+    {
+      key: 'OPENAI_API_KEY',
+      label: 'OpenAI',
+      unlocks: 'Chat, Images, Voice, Video',
+      configured: configuredKeys.OPENAI_API_KEY?.configured || !!envKeys.OPENAI_API_KEY,
+      preview: configuredKeys.OPENAI_API_KEY?.preview || (envKeys.OPENAI_API_KEY ? maskSecret(envKeys.OPENAI_API_KEY) : null),
+    },
+    {
+      key: 'GOOGLE_API_KEY',
+      label: 'Google AI',
+      unlocks: 'Chat, Images, Voice, Video',
+      configured: configuredKeys.GOOGLE_API_KEY?.configured || !!envKeys.GOOGLE_API_KEY,
+      preview: configuredKeys.GOOGLE_API_KEY?.preview || (envKeys.GOOGLE_API_KEY ? maskSecret(envKeys.GOOGLE_API_KEY) : null),
+    },
+    {
+      key: 'ELEVENLABS_API_KEY',
+      label: 'ElevenLabs',
+      unlocks: 'Premium Voice',
+      configured: configuredKeys.ELEVENLABS_API_KEY?.configured || !!envKeys.ELEVENLABS_API_KEY,
+      preview: configuredKeys.ELEVENLABS_API_KEY?.preview || (envKeys.ELEVENLABS_API_KEY ? maskSecret(envKeys.ELEVENLABS_API_KEY) : null),
+    },
   ];
 
   console.log('');
   console.log(sectionHeader('API Keys'));
+  if (secureAvailable) {
+    console.log(`  ${DIM}Keys are stored securely in system keychain${RESET}`);
+  } else {
+    console.log(`  ${ORANGE}Warning: Secure storage unavailable, using fallback${RESET}`);
+  }
   console.log('');
 
   for (const k of keyInfo) {
-    const status = k.value
-      ? `${TEAL}\u2713 configured${RESET}  ${DIM}${maskSecret(k.value)}${RESET}`
+    const status = k.configured
+      ? `${TEAL}\u2713 configured${RESET}  ${DIM}${k.preview || '****'}${RESET}`
       : `${DIM}\u25cb not set${RESET}`;
     console.log(`  ${BOLD}${k.label}${RESET}  ${status}`);
     console.log(`  ${DIM}Unlocks: ${k.unlocks}${RESET}`);
@@ -578,7 +620,7 @@ async function cmdKeys(ctx) {
 
   // Offer to add/update
   const options = keyInfo.map(k => ({
-    label: `${k.value ? 'Update' : 'Add'} ${k.label} key`,
+    label: `${k.configured ? 'Update' : 'Add'} ${k.label} key`,
     value: k.key,
   }));
   options.push({ label: 'Done', value: 'done' });
@@ -588,7 +630,7 @@ async function cmdKeys(ctx) {
 
   const selected = keyInfo.find(k => k.key === choice.value);
   console.log('');
-  console.log(`  ${DIM}Enter your ${selected.label} API key:${RESET}`);
+  console.log(`  ${DIM}Enter your ${selected.label} API key (input is hidden):${RESET}`);
   const newValue = await askSecret(ctx.rl, `  ${selected.label} key: `);
 
   if (!newValue) {
@@ -596,29 +638,38 @@ async function cmdKeys(ctx) {
     return;
   }
 
-  // Write to ~/.friday/.env
+  // Store securely in system keychain
   try {
-    const dir = path.dirname(ENV_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    let content = '';
-    if (fs.existsSync(ENV_FILE)) {
-      content = fs.readFileSync(ENV_FILE, 'utf8');
-    }
-
-    // Replace or append
-    const regex = new RegExp(`^${selected.key}=.*$`, 'm');
-    if (regex.test(content)) {
-      content = content.replace(regex, `${selected.key}=${newValue}`);
+    if (secureAvailable) {
+      await setApiKey(selected.key, newValue);
+      console.log('');
+      console.log(success(`\u2713 ${selected.label} key saved securely to system keychain`));
+      console.log(hint('Start a /new session for changes to take effect.'));
+      console.log('');
     } else {
-      content += `${content.endsWith('\n') || content === '' ? '' : '\n'}${selected.key}=${newValue}\n`;
-    }
+      // Fallback to .env file (less secure, but functional)
+      const dir = path.dirname(ENV_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    fs.writeFileSync(ENV_FILE, content, 'utf8');
-    console.log('');
-    console.log(success(`\u2713 ${selected.label} key saved to ~/.friday/.env`));
-    console.log(hint('Start a /new session for changes to take effect.'));
-    console.log('');
+      let content = '';
+      if (fs.existsSync(ENV_FILE)) {
+        content = fs.readFileSync(ENV_FILE, 'utf8');
+      }
+
+      const regex = new RegExp(`^${selected.key}=.*$`, 'm');
+      if (regex.test(content)) {
+        content = content.replace(regex, `${selected.key}=${newValue}`);
+      } else {
+        content += `${content.endsWith('\n') || content === '' ? '' : '\n'}${selected.key}=${newValue}\n`;
+      }
+
+      fs.writeFileSync(ENV_FILE, content, 'utf8');
+      console.log('');
+      console.log(success(`\u2713 ${selected.label} key saved to ~/.friday/.env`));
+      console.log(`  ${ORANGE}Note: For better security, install keytar for secure keychain storage${RESET}`);
+      console.log(hint('Start a /new session for changes to take effect.'));
+      console.log('');
+    }
   } catch (err) {
     console.log(errorMsg(`Failed to save key: ${err.message}`));
   }

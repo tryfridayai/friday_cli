@@ -26,6 +26,7 @@ import {
 } from './chat/slashCommands.js';
 import { checkPreQueryHint, checkPostResponseHint } from './chat/smartAffordances.js';
 import { runtimeDir } from '../resolveRuntime.js';
+import { loadApiKeysToEnv } from '../secureKeyStore.js';
 const serverScript = path.join(runtimeDir, 'friday-server.js');
 
 // ── Tool humanization ────────────────────────────────────────────────────
@@ -271,7 +272,18 @@ export default async function chat(args) {
   );
   fs.mkdirSync(workspacePath, { recursive: true });
 
-  // Load ~/.friday/.env into process.env so the runtime sees user-configured keys
+  // Load API keys from secure storage (system keychain)
+  // Keys are loaded into process.env for the runtime to access,
+  // but are filtered out before being passed to the agent (see AgentRuntime.js)
+  try {
+    await loadApiKeysToEnv();
+  } catch (err) {
+    if (verbose) {
+      console.log(`${DIM}Note: Could not load from secure storage: ${err.message}${RESET}`);
+    }
+  }
+
+  // Fallback: Also check ~/.friday/.env for legacy keys (will be migrated to keychain)
   const fridayEnvPath = path.join(os.homedir(), '.friday', '.env');
   try {
     if (fs.existsSync(fridayEnvPath)) {
@@ -282,6 +294,7 @@ export default async function chat(args) {
         const eqIdx = trimmed.indexOf('=');
         const key = trimmed.slice(0, eqIdx).trim();
         const val = trimmed.slice(eqIdx + 1).trim();
+        // Only use .env values if not already set from secure storage
         if (key && val && !process.env[key]) {
           process.env[key] = val;
         }

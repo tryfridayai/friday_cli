@@ -12,6 +12,44 @@ import { spawn, exec } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 
+// =============================================================================
+// SENSITIVE ENVIRONMENT VARIABLE FILTERING
+// =============================================================================
+// API keys and secrets should NEVER be exposed to processes spawned by the agent.
+// =============================================================================
+
+const SENSITIVE_ENV_PATTERNS = [
+  /^ANTHROPIC_API_KEY$/i,
+  /^OPENAI_API_KEY$/i,
+  /^GOOGLE_API_KEY$/i,
+  /^ELEVENLABS_API_KEY$/i,
+  /^GOOGLE_GENERATIVE_AI_API_KEY$/i,
+  /API_KEY$/i,
+  /API_SECRET$/i,
+  /SECRET_KEY$/i,
+  /ACCESS_TOKEN$/i,
+  /PRIVATE_KEY$/i,
+  /AUTH_TOKEN$/i,
+  /PASSWORD$/i,
+  /^AWS_SECRET/i,
+  /^GITHUB_TOKEN$/i,
+  /^NPM_TOKEN$/i,
+  /^FIRECRAWL_API_KEY$/i,
+  /^RESEND_API_KEY$/i,
+  /^BROWSERBASE_API_KEY$/i,
+];
+
+function filterSensitiveEnv(env) {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(env)) {
+    const isSensitive = SENSITIVE_ENV_PATTERNS.some(pattern => pattern.test(key));
+    if (!isSensitive) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 class ProcessRegistry extends EventEmitter {
   constructor(options = {}) {
     super();
@@ -60,7 +98,7 @@ class ProcessRegistry extends EventEmitter {
     const spawnOptions = {
       ...options,
       cwd,
-      env: { ...process.env, ...options.env },
+      env: { ...filterSensitiveEnv(process.env), ...options.env },
       shell: options.shell !== false, // Default to shell mode
     };
 
@@ -121,7 +159,7 @@ class ProcessRegistry extends EventEmitter {
     return new Promise((resolve, reject) => {
       const execOptions = {
         cwd,
-        env: { ...process.env, ...options.env },
+        env: { ...filterSensitiveEnv(process.env), ...options.env },
         timeout,
         maxBuffer: options.maxBuffer || 10 * 1024 * 1024, // 10MB
         shell: options.shell !== false,

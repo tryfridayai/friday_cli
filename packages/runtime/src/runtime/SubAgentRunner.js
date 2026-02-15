@@ -18,6 +18,44 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
+// =============================================================================
+// SENSITIVE ENVIRONMENT VARIABLE FILTERING
+// =============================================================================
+// API keys and secrets should NEVER be exposed to subagents.
+// =============================================================================
+
+const SENSITIVE_ENV_PATTERNS = [
+  /^ANTHROPIC_API_KEY$/i,
+  /^OPENAI_API_KEY$/i,
+  /^GOOGLE_API_KEY$/i,
+  /^ELEVENLABS_API_KEY$/i,
+  /^GOOGLE_GENERATIVE_AI_API_KEY$/i,
+  /API_KEY$/i,
+  /API_SECRET$/i,
+  /SECRET_KEY$/i,
+  /ACCESS_TOKEN$/i,
+  /PRIVATE_KEY$/i,
+  /AUTH_TOKEN$/i,
+  /PASSWORD$/i,
+  /^AWS_SECRET/i,
+  /^GITHUB_TOKEN$/i,
+  /^NPM_TOKEN$/i,
+  /^FIRECRAWL_API_KEY$/i,
+  /^RESEND_API_KEY$/i,
+  /^BROWSERBASE_API_KEY$/i,
+];
+
+function filterSensitiveEnv(env) {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(env)) {
+    const isSensitive = SENSITIVE_ENV_PATTERNS.some(pattern => pattern.test(key));
+    if (!isSensitive) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 export class SubAgentRunner {
   /**
    * @param {Object} options
@@ -95,7 +133,7 @@ export class SubAgentRunner {
       },
       mcpServers: sdkMcpServers,
       systemPrompt,
-      env: process.env,
+      env: filterSensitiveEnv(process.env),
     };
 
     try {

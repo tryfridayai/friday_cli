@@ -38,7 +38,8 @@
   ],
   "author": "Friday AI <hello@tryfriday.ai>",
   "dependencies": {
-    "friday-runtime": "^0.2.0"
+    "friday-runtime": "^0.2.0",
+    "keytar": "^7.9.0"
   },
   "engines": {
     "node": ">=18.0.0"
