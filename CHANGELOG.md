@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fixed API key exposure in agent context** - API keys are now filtered out of environment variables before being passed to the Claude SDK. The agent can no longer access sensitive keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 - **Fixed API key exposure in terminal commands** - Commands executed by the agent no longer have access to API keys. Running `env` or `echo $OPENAI_API_KEY` will not expose secrets.
 - **Added secure keychain storage for API keys** - The `/keys` command now stores API keys in the system keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) instead of plain text `.env` files.
+- **Added API key input blocking** - Any input that matches API key patterns (OpenAI, Anthropic, Google) is now automatically blocked from being sent to the agent. This prevents accidental leakage from readline buffer issues.
+- **Added slash command input isolation** - Input received during slash command processing (like `/keys`) is now ignored to prevent leaked buffer content from being sent as queries.
 
 #### Added
 - `packages/cli/src/secureKeyStore.js` - New secure key storage module using `keytar` for OS-level encryption

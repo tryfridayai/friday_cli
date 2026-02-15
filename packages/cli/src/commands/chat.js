@@ -694,6 +694,22 @@ export default async function chat(args) {
 
   // ── Input handler ──────────────────────────────────────────────────────
 
+  // Flag to prevent leaked input from askSecret from being sent as query
+  let processingSlashCommand = false;
+
+  // Safety patterns to detect accidentally leaked API keys
+  const API_KEY_PATTERNS = [
+    /^sk-[a-zA-Z0-9-_]{20,}$/,           // OpenAI/Anthropic style
+    /^sk-ant-[a-zA-Z0-9-_]{20,}$/,       // Anthropic
+    /^sk-proj-[a-zA-Z0-9-_]{20,}$/,      // OpenAI project keys
+    /^AIza[a-zA-Z0-9-_]{30,}$/,          // Google API keys
+    /^[a-f0-9]{32}$/,                     // Generic 32-char hex keys
+  ];
+
+  function looksLikeApiKey(text) {
+    return API_KEY_PATTERNS.some(pattern => pattern.test(text));
+  }
+
   rl.on('line', async (input) => {
     const line = input.trim();
     if (!line) {
@@ -701,9 +717,29 @@ export default async function chat(args) {
       return;
     }
 
+    // SECURITY: Block any input that looks like an API key
+    // This prevents accidentally leaked keys from being sent to the agent
+    if (looksLikeApiKey(line)) {
+      console.log(`${RED}Blocked: Input looks like an API key and was not sent to the agent.${RESET}`);
+      console.log(`${DIM}Use /keys to securely configure API keys.${RESET}`);
+      rl.prompt();
+      return;
+    }
+
+    // Ignore input while processing a slash command (e.g., leaked from askSecret)
+    if (processingSlashCommand) {
+      rl.prompt();
+      return;
+    }
+
     // ── Slash commands (/help, /plugins, etc.) ──────────────────────────
     if (line.startsWith('/')) {
-      await routeSlashCommand(line, slashCtx);
+      processingSlashCommand = true;
+      try {
+        await routeSlashCommand(line, slashCtx);
+      } finally {
+        processingSlashCommand = false;
+      }
       return;
     }
 
