@@ -38,24 +38,22 @@ export default function ChatInput() {
 
   return (
     <div className="flex-shrink-0 border-t border-border-subtle bg-surface-0 px-4 py-3">
-      <div className="flex items-end gap-2 max-w-4xl mx-auto">
-        <div className="flex-1 relative">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={backendReady ? 'Message Friday...' : 'Starting backend...'}
-            disabled={!backendReady}
-            rows={1}
-            className="w-full resize-none px-4 py-3 bg-surface-1 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
-          />
-        </div>
+      <div className="relative max-w-4xl mx-auto">
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={backendReady ? 'Message Friday...' : 'Starting backend...'}
+          disabled={!backendReady}
+          rows={1}
+          className="w-full resize-none px-4 py-3 pr-12 bg-surface-1 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
+        />
 
         {isStreaming ? (
           <button
             onClick={abortQuery}
-            className="flex-shrink-0 p-2.5 rounded-xl bg-danger text-white hover:bg-danger/80 transition-colors"
+            className="absolute right-3 bottom-3 flex-shrink-0 p-1.5 rounded-lg bg-danger text-white hover:bg-danger/80 transition-colors"
             title="Stop"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -66,7 +64,7 @@ export default function ChatInput() {
           <button
             onClick={handleSubmit}
             disabled={!input.trim() || !backendReady}
-            className="flex-shrink-0 p-2.5 rounded-xl bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="absolute right-3 bottom-3 flex-shrink-0 p-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             title="Send"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

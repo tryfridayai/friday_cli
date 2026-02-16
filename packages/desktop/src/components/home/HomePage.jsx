@@ -7,6 +7,7 @@ import AppChips from './AppChips';
 
 export default function HomePage() {
   const [input, setInput] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
   const sendMessage = useStore((s) => s.sendMessage);
   const sessions = useStore((s) => s.sessions);
   const resumeSession = useStore((s) => s.resumeSession);
@@ -26,7 +27,7 @@ export default function HomePage() {
   };
 
   const handlePromptSelect = (prompt) => {
-    sendMessage(prompt);
+    setInput(prompt);
   };
 
   return (
@@ -42,9 +43,9 @@ export default function HomePage() {
           <div className="flex justify-center mb-4">
             <FridayLogo size={48} />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Friday AI</h1>
+          <h1 className="text-2xl font-bold mb-2">Friday AI: Studio</h1>
           <p className="text-text-secondary text-sm">
-            Your autonomous AI agent. Ask anything.
+            Create images, voice, and video with AI.
           </p>
           {!backendReady && (
             <p className="text-text-muted text-xs mt-2 animate-pulse">
@@ -62,19 +63,20 @@ export default function HomePage() {
           className="mb-8"
         >
           <div className="relative">
-            <input
-              type="text"
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
               placeholder="Ask Friday anything..."
               disabled={!backendReady}
-              className="w-full px-5 py-3.5 bg-surface-1 border border-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
+              rows={4}
+              className="w-full resize-none px-5 py-4 pr-12 bg-surface-1 border border-border rounded-2xl text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all disabled:opacity-50"
               autoFocus
             />
             <button
               type="submit"
               disabled={!input.trim() || !backendReady}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="absolute right-3 bottom-3 p-2 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13" />
@@ -85,10 +87,10 @@ export default function HomePage() {
         </motion.form>
 
         {/* App filters */}
-        <AppChips />
+        <AppChips active={activeFilter} onSelect={setActiveFilter} />
 
         {/* Prompt suggestions */}
-        <PromptGrid onSelect={handlePromptSelect} />
+        <PromptGrid onSelect={handlePromptSelect} filter={activeFilter} />
 
         {/* Recent sessions */}
         {sessions.length > 0 && (

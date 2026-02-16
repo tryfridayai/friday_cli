@@ -213,9 +213,9 @@ app.whenReady().then(() => {
       const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
       if (match) {
         const start = parseInt(match[1], 10);
-        // Clamp end to fileSize - 1; cap chunk at 2MB to avoid huge allocations
-        const MAX_CHUNK = 2 * 1024 * 1024;
-        const requestedEnd = match[2] ? parseInt(match[2], 10) : start + MAX_CHUNK - 1;
+        // Open-ended range (bytes=0-): serve from start to end of file (standard HTTP)
+        // Explicit end (bytes=0-1023): honour it, clamped to file size
+        const requestedEnd = match[2] ? parseInt(match[2], 10) : fileSize - 1;
         const end = Math.min(requestedEnd, fileSize - 1);
 
         if (start >= fileSize) {
@@ -491,6 +491,10 @@ ipcMain.handle('get-workspace', () => {
 
 ipcMain.handle('open-external', (_event, url) => {
   shell.openExternal(url);
+});
+
+ipcMain.handle('open-file-path', (_event, filePath) => {
+  shell.openPath(filePath);
 });
 
 ipcMain.on('restart-backend', () => {

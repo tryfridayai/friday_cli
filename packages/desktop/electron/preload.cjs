@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('friday', {
 
   // ── Utility ─────────────────────────────────────────────────────────
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openFilePath: (filePath) => ipcRenderer.invoke('open-file-path', filePath),
   restartBackend: () => ipcRenderer.send('restart-backend'),
 
   // ── Platform info ───────────────────────────────────────────────────
