@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`how-to-use-friday-cli.md`** — Comprehensive CLI documentation for Mintlify, covering all commands, models, plugins, use cases, and SEO-optimized sections for each model and plugin name.
 - **`/model` command** — Interactive per-model enable/disable UI. Browse models by category (Chat, Image, Video, Voice, STT), see pricing and status, toggle individual models on/off. Replaces the old read-only `/models` list.
 
+#### Changed
+- **Token display shows chat tokens only** — Removed estimated cost from the post-response line. Now shows `chat: N tokens` instead of `$X.XX · N tokens`, since cost was only for the chat model and did not account for image/video/voice usage.
+
 #### Fixed
 - **Multi-line paste only sent first line** — Pasted text (which arrives as one `data` event with embedded newlines) is now joined into a single message instead of discarding all but the first line.
 - **Permission prompts stacked with no navigation** — Multiple simultaneous `permission_request` messages are now queued and shown one at a time. Only one `selectOption` is active at any moment, preventing overlapping arrow-key input.

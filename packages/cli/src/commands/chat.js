@@ -653,12 +653,15 @@ export default async function chat(args) {
           if (isStreaming) {
             isStreaming = false;
           }
-          // Show cost summary if available
-          if (msg.cost && msg.cost.estimated > 0) {
-            const cost = msg.cost.estimated;
-            const costStr = cost < 0.01 ? `${(cost * 100).toFixed(2)}c` : `$${cost.toFixed(4)}`;
+          // Show chat token usage if available
+          if (msg.cost && msg.cost.tokens) {
             const tokens = msg.cost.tokens;
-            console.log(`\n${DIM}${costStr} \u00b7 ${tokens.input + tokens.output} tokens${RESET}`);
+            const total = tokens.input + tokens.output;
+            if (total > 0) {
+              console.log(`\n${DIM}chat: ${total.toLocaleString()} tokens${RESET}`);
+            } else {
+              console.log('');
+            }
           } else {
             console.log('');
           }
