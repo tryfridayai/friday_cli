@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import useStore from '../../store/useStore';
 
 export default function ResizeHandle() {
   const [dragging, setDragging] = useState(false);
   const startX = useRef(0);
+  const startWidth = useRef(0);
 
   const onMouseDown = useCallback((e) => {
     setDragging(true);
     startX.current = e.clientX;
+    startWidth.current = useStore.getState().previewWidth;
     e.preventDefault();
   }, []);
 
@@ -14,8 +17,9 @@ export default function ResizeHandle() {
     if (!dragging) return;
 
     const onMouseMove = (e) => {
-      // The parent handles the actual resize via flex-basis or width
-      // For now this is a visual affordance; full resize can be added later
+      // Dragging left → panel gets wider (deltaX is negative)
+      const delta = startX.current - e.clientX;
+      useStore.getState().setPreviewWidth(startWidth.current + delta);
       document.body.style.cursor = 'col-resize';
     };
 
@@ -29,6 +33,7 @@ export default function ResizeHandle() {
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
     };
   }, [dragging]);
 

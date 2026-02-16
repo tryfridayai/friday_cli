@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, net, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, protocol } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -8,8 +8,9 @@ const { execSync } = require('child_process');
 
 // ── Custom protocol for serving local media files ───────────────────────
 // Must be registered before app.whenReady()
+// No 'standard: true' — prevents URL normalization that lowercases path components
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'friday-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+  { scheme: 'friday-media', privileges: { secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
 ]);
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -176,11 +177,87 @@ function createWindow() {
   });
 }
 
+// ── MIME type lookup ──────────────────────────────────────────────────────
+const MIME_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+};
+
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return MIME_TYPES[ext] || 'application/octet-stream';
+}
+
 app.whenReady().then(() => {
-  // Register protocol handler to serve local files (file:// is blocked from http:// origins)
-  protocol.handle('friday-media', (request) => {
-    const fileUrl = request.url.replace('friday-media://', 'file://');
-    return net.fetch(fileUrl);
+  // Register protocol handler to serve local files with proper MIME types + range support
+  protocol.handle('friday-media', async (request) => {
+    // Extract path: friday-media:///Users/... → /Users/...
+    let filePath = decodeURIComponent(request.url.replace('friday-media://', ''));
+    if (!filePath.startsWith('/')) filePath = '/' + filePath;
+
+    let stat;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    const mimeType = getMimeType(filePath);
+    const fileSize = stat.size;
+    const rangeHeader = request.headers.get('range');
+
+    // Parse range header if present
+    if (rangeHeader) {
+      const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        // Clamp end to fileSize - 1; cap chunk at 2MB to avoid huge allocations
+        const MAX_CHUNK = 2 * 1024 * 1024;
+        const requestedEnd = match[2] ? parseInt(match[2], 10) : start + MAX_CHUNK - 1;
+        const end = Math.min(requestedEnd, fileSize - 1);
+
+        if (start >= fileSize) {
+          return new Response('', {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${fileSize}` },
+          });
+        }
+
+        const chunkSize = end - start + 1;
+        const buffer = Buffer.alloc(chunkSize);
+        let fd;
+        try {
+          fd = fs.openSync(filePath, 'r');
+          fs.readSync(fd, buffer, 0, chunkSize, start);
+        } finally {
+          if (fd !== undefined) fs.closeSync(fd);
+        }
+
+        return new Response(buffer, {
+          status: 206,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Length': String(chunkSize),
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+    }
+
+    // Non-range request: for small files read fully; for large files return first chunk
+    // so the browser can start playback and then issue range requests
+    const data = fs.readFileSync(filePath);
+    return new Response(data, {
+      status: 200,
+      headers: {
+        'Content-Type': mimeType,
+        'Content-Length': String(fileSize),
+        'Accept-Ranges': 'bytes',
+      },
+    });
   });
 
   createWindow();
@@ -314,6 +391,60 @@ ipcMain.handle('delete-api-key', async (_event, { keyName }) => {
     console.error('[Keytar] Error deleting key:', err.message);
     return { success: false, error: err.message };
   }
+});
+
+// ── Media file scanning IPC ──────────────────────────────────────────────
+
+const MEDIA_EXTENSIONS = {
+  images: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
+  audio: ['.mp3', '.wav', '.ogg'],
+  video: ['.mp4', '.webm', '.mov'],
+};
+
+function scanDirForMedia(dirPath) {
+  const result = { images: [], audio: [], video: [] };
+  if (!fs.existsSync(dirPath)) return result;
+
+  function walk(dir) {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        let category = null;
+        if (MEDIA_EXTENSIONS.images.includes(ext)) category = 'images';
+        else if (MEDIA_EXTENSIONS.audio.includes(ext)) category = 'audio';
+        else if (MEDIA_EXTENSIONS.video.includes(ext)) category = 'video';
+        if (category) {
+          try {
+            const stat = fs.statSync(fullPath);
+            result[category].push({
+              name: entry.name,
+              path: fullPath,
+              size: stat.size,
+              modified: stat.mtimeMs,
+            });
+          } catch { /* skip unreadable files */ }
+        }
+      }
+    }
+  }
+
+  walk(dirPath);
+  // Sort each category by most recent first
+  for (const cat of ['images', 'audio', 'video']) {
+    result[cat].sort((a, b) => b.modified - a.modified);
+  }
+  return result;
+}
+
+ipcMain.handle('scan-media-files', async () => {
+  const workspace = process.env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace');
+  const generatedDir = path.join(workspace, 'generated');
+  return scanDirForMedia(generatedDir);
 });
 
 // ── Session history IPC ─────────────────────────────────────────────────

@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('friday', {
   // ── Scheduled Agents ────────────────────────────────────────────────
   sendScheduledAgent: (data) => ipcRenderer.send('scheduled-agent', data),
 
+  // ── Media files ──────────────────────────────────────────────────────
+  scanMediaFiles: () => ipcRenderer.invoke('scan-media-files'),
+
   // ── Utility ─────────────────────────────────────────────────────────
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   restartBackend: () => ipcRenderer.send('restart-backend'),

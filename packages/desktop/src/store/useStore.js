@@ -81,10 +81,21 @@ const useStore = create((set, get) => ({
   // ── Preview panel ─────────────────────────────────────────────────────
   previewOpen: true,
   setPreviewOpen: (v) => set({ previewOpen: v }),
+  previewWidth: 320, // pixels, draggable between 240-640
+  setPreviewWidth: (w) => set({ previewWidth: Math.max(240, Math.min(640, w)) }),
   previewContent: null, // { type: 'image'|'audio'|'video', url, alt }
   setPreviewContent: (content) => set({ previewContent: content }),
   previewTab: 'agents', // 'preview' | 'agents'
   setPreviewTab: (tab) => set({ previewTab: tab }),
+
+  // ── Media gallery ──────────────────────────────────────────────────────
+  mediaFiles: { images: [], audio: [], video: [] },
+  setMediaFiles: (files) => set({ mediaFiles: files }),
+  loadMediaFiles: async () => {
+    if (!window.friday) return;
+    const files = await window.friday.scanMediaFiles();
+    set({ mediaFiles: files || { images: [], audio: [], video: [] } });
+  },
 
   // ── Completion cost ───────────────────────────────────────────────────
   lastCost: null,

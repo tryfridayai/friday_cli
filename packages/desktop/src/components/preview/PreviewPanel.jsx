@@ -6,10 +6,13 @@ export default function PreviewPanel() {
   const previewTab = useStore((s) => s.previewTab);
   const setPreviewTab = useStore((s) => s.setPreviewTab);
   const previewContent = useStore((s) => s.previewContent);
+  const setPreviewContent = useStore((s) => s.setPreviewContent);
   const setPreviewOpen = useStore((s) => s.setPreviewOpen);
+  const mediaFiles = useStore((s) => s.mediaFiles);
+  const previewWidth = useStore((s) => s.previewWidth);
 
   return (
-    <div className="w-80 flex-shrink-0 bg-surface-1 border-l border-border-subtle flex flex-col">
+    <div className="flex-shrink-0 bg-surface-1 border-l border-border-subtle flex flex-col" style={{ width: previewWidth }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <div className="flex gap-1">
@@ -41,7 +44,7 @@ export default function PreviewPanel() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {previewTab === 'preview' ? (
-          <MediaViewer content={previewContent} />
+          <MediaViewer content={previewContent} mediaFiles={mediaFiles} onSelect={setPreviewContent} />
         ) : (
           <AgentsPanel />
         )}

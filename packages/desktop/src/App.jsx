@@ -30,6 +30,7 @@ export default function App() {
         case 'ready':
           store.setBackendReady(true);
           store.loadSessions();
+          store.loadMediaFiles();
           store.loadApiKeys().then(() => {
             // Show API keys modal on first startup if no keys configured
             const keys = useStore.getState().apiKeys;
@@ -91,6 +92,7 @@ export default function App() {
               store.setPreviewContent({ type: mediaType, url: `friday-media://${filePath}`, alt: filePath });
               store.setPreviewTab('preview');
               store.setPreviewOpen(true);
+              store.loadMediaFiles();
             }
           }
           // Also detect generate_image / text_to_speech tool names
@@ -104,6 +106,7 @@ export default function App() {
               store.setPreviewContent({ type, url: `friday-media://${fp}`, alt: fp });
               store.setPreviewTab('preview');
               store.setPreviewOpen(true);
+              store.loadMediaFiles();
             }
           }
           break;
@@ -126,6 +129,8 @@ export default function App() {
           store.setIsThinking(false);
           store.setCurrentTool(null);
           if (msg.cost) store.setLastCost(msg.cost);
+          // Refresh media gallery on completion
+          store.loadMediaFiles();
           // Scan the last assistant message text for media file paths
           const msgs = useStore.getState().messages;
           const lastMsg = msgs[msgs.length - 1];

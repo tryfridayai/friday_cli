@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 2026-02-16
 
+#### Added
+- **Desktop: Media gallery** — Preview panel now shows a persistent gallery of all media files in `~/FridayWorkspace/generated/`. Category tabs (Images, Audio, Video) with count badges, file list with thumbnails and relative timestamps, sorted by most recent first. Gallery auto-refreshes when the agent generates new media. Click any file to preview it.
+- **Desktop: Resizable preview panel** — Preview panel width can now be dragged via the resize handle between 240px and 640px. Width persists during the session.
+
 #### Fixed
+- **Desktop: Video/audio playback** — Removed `standard: true` from `friday-media://` scheme registration which was lowercasing URL path components (e.g., `/Users/...` became `/users/...`). Replaced `net.fetch` with direct `fs.readFileSync` serving that provides explicit MIME types and HTTP 206 range request support, which is required for video/audio seeking and playback. Added robust range request parsing with null guards, chunk size capping (2MB), and HTTP 416 responses for out-of-range requests.
 - **Desktop: Image/media preview rendering** — Registered custom `friday-media://` Electron protocol to serve local files. The `file://` protocol is blocked by Chromium when the renderer loads from `http://localhost` in dev mode. Images, audio, and video now render correctly in the preview panel.
 - **Desktop: Media preview detection** — Preview panel now detects media file paths (images, audio, video) from assistant text responses, not just tool_result messages. Fixes generated images not appearing in the preview panel.
 - **Desktop: Friday-media shows "Requires setup" when keys already configured** — The Apps pane now cross-references keytar API keys (from the API Keys tab) with MCP servers that depend on them. Friday-media shows "Connected" when OpenAI/Google/ElevenLabs keys are already set, instead of redundantly asking for the same keys.
