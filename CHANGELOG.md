@@ -10,7 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 2026-02-15
 
 #### Added
+- **Bottom-pinned input bar** (`inputLine.js`) — User input is now pinned to the bottom of the terminal with a separator line, preventing output from overwriting or mixing with the input prompt. Uses ANSI scroll regions to confine agent output above the separator while the prompt stays fixed at the bottom row.
+- **Command history** — Up/Down arrow keys cycle through the last 50 commands in a ring buffer. Full cursor editing (Left/Right, Home/End, Ctrl+A/E/U/K/W, Delete) supported.
+- **`how-to-use-friday-cli.md`** — Comprehensive CLI documentation for Mintlify, covering all commands, models, plugins, use cases, and SEO-optimized sections for each model and plugin name.
 - **`/model` command** — Interactive per-model enable/disable UI. Browse models by category (Chat, Image, Video, Voice, STT), see pricing and status, toggle individual models on/off. Replaces the old read-only `/models` list.
+
+#### Fixed
+- **Multi-line paste only sent first line** — Pasted text (which arrives as one `data` event with embedded newlines) is now joined into a single message instead of discarding all but the first line.
+- **Permission prompts stacked with no navigation** — Multiple simultaneous `permission_request` messages are now queued and shown one at a time. Only one `selectOption` is active at any moment, preventing overlapping arrow-key input.
+- **Denying a permission threw API errors** (`tool_use ids must be unique`) — Caused by concurrent `selectOption` prompts consuming each other's keystrokes. Fixed by the permission queue ensuring sequential handling.
+- **`/model` pricing incomplete** — `formatModelPrice()` now shows high-res and 4K tiers for video models (e.g., `$0.40/sec ($0.60 4K)`), quality price ranges for image models (e.g., `$0.009-$0.133/image`), WaveNet/Neural2 tiers for Google TTS, and notes for chat model pricing.
 - **Disabled model tracking** in `ProviderRegistry` — `toggleModel()`, `isModelDisabled()`, `getDisabledModels()` methods with persistence in `provider-preferences.json`
 - **Model catalog API** — `getModelsForCapability()` returns enriched model list with pricing, default status, key availability, and disabled state
 - **`formatModelPrice()` helper** — Human-readable pricing display for all model types (per token, per image, per second, per character, per minute)

@@ -8,7 +8,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import readline from 'readline';
 import {
   PURPLE, BLUE, TEAL, ORANGE, PINK, DIM, RESET, BOLD,
   RED, GREEN, CYAN, YELLOW,
@@ -131,21 +130,102 @@ function readEnvKeys() {
   return keys;
 }
 
+/**
+ * Ask a question and wait for text input.
+ * Works with both readline and the InputLine rlCompat adapter.
+ */
 function askQuestion(rl, question) {
   return new Promise((resolve) => {
-    rl.question(question, (answer) => resolve(answer.trim()));
+    // If rl has a native .question() (readline interface), use it
+    if (typeof rl.question === 'function') {
+      rl.question(question, (answer) => resolve(answer.trim()));
+      return;
+    }
+
+    // Otherwise use raw stdin (InputLine rlCompat adapter)
+    rl.pause();
+
+    let input = '';
+    const wasRaw = process.stdin.isRaw;
+
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+
+    const cleanup = () => {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(wasRaw || false);
+      }
+      process.stdout.write('\n');
+      rl.resume();
+    };
+
+    const onData = (data) => {
+      const str = data.toString();
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        const code = ch.charCodeAt(0);
+
+        if (ch === '\r' || ch === '\n') {
+          cleanup();
+          resolve(input.trim());
+          return;
+        }
+        if (code === 3) { // Ctrl+C
+          cleanup();
+          resolve('');
+          return;
+        }
+        if (code === 127 || code === 8) { // Backspace
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+          continue;
+        }
+        // Skip escape sequences
+        if (code === 0x1b) {
+          i++;
+          if (i < str.length && str[i] === '[') {
+            i++;
+            while (i < str.length && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x3f) i++;
+            // skip final byte
+          }
+          continue;
+        }
+        // Skip control chars
+        if (code < 0x20) continue;
+
+        input += ch;
+        process.stdout.write(ch);
+      }
+    };
+
+    process.stdin.on('data', onData);
+
+    setImmediate(() => {
+      process.stdout.write(question);
+    });
   });
 }
 
 /**
  * Read input with secret masking (hides characters with *).
  * SECURITY: Input is NEVER echoed - only asterisks are shown.
+ * Works with both readline and the InputLine rlCompat adapter.
  */
 function askSecret(rl, prompt) {
   return new Promise((resolve) => {
-    // Fully detach readline so it doesn't echo input
+    // Pause InputLine / readline so it doesn't capture keystrokes
     rl.pause();
-    rl.terminal = false;
+
+    // Fully detach readline echo if it has terminal property
+    const hadTerminal = rl.terminal;
+    if ('terminal' in rl) {
+      rl.terminal = false;
+    }
 
     // Clear any buffered input from readline
     if (rl.line) {
@@ -169,7 +249,10 @@ function askSecret(rl, prompt) {
         process.stdin.setRawMode(wasRaw || false);
       }
       process.stdout.write('\n');
-      rl.terminal = true;
+
+      if ('terminal' in rl) {
+        rl.terminal = hadTerminal;
+      }
 
       // Clear readline buffer before resuming to prevent leakage
       if (rl.line) {
@@ -553,28 +636,50 @@ async function pluginUninstallFlow(pm, ctx) {
 function formatModelPrice(pricing, capability) {
   if (!pricing) return '';
 
-  // Chat models: input/output per 1M tokens
-  if (pricing.input_per_1m_tokens != null) {
-    return `$${pricing.input_per_1m_tokens.toFixed(2)}/$${pricing.output_per_1m_tokens.toFixed(2)} per 1M tokens`;
+  // Video models: per second — show standard and high-res/4K tiers
+  if (pricing.per_second != null) {
+    let result = `$${pricing.per_second.toFixed(2)}/sec`;
+    if (pricing.per_second_high_res) {
+      result += ` ($${pricing.per_second_high_res.toFixed(2)} high-res)`;
+    }
+    if (pricing.per_second_4k) {
+      result += ` ($${pricing.per_second_4k.toFixed(2)} 4K)`;
+    }
+    return result;
   }
 
-  // Image models: per image (use high quality as representative)
+  // Chat models: input/output per 1M tokens — show cached price if available
+  if (pricing.input_per_1m_tokens != null) {
+    let result = `$${pricing.input_per_1m_tokens.toFixed(2)} in / $${pricing.output_per_1m_tokens.toFixed(2)} out per 1M`;
+    if (pricing.notes) result += ` — ${pricing.notes}`;
+    return result;
+  }
+
+  // Image models: per image — show quality range for tiered pricing
   if (pricing.per_image != null) {
     if (typeof pricing.per_image === 'number') {
-      return `$${pricing.per_image.toFixed(2)}/image`;
+      return `$${pricing.per_image.toFixed(3)}/image`;
     }
     const sizes = pricing.per_image;
-    const firstSize = Object.values(sizes)[0];
-    if (typeof firstSize === 'object') {
-      const price = firstSize.high ?? firstSize.enhanced ?? firstSize.standard ?? Object.values(firstSize)[0];
-      if (price != null) return `$${price.toFixed(2)}/image`;
+    // Collect all prices across sizes and qualities
+    const allPrices = [];
+    for (const sizeVal of Object.values(sizes)) {
+      if (typeof sizeVal === 'number') {
+        allPrices.push(sizeVal);
+      } else if (typeof sizeVal === 'object') {
+        for (const qualityPrice of Object.values(sizeVal)) {
+          if (typeof qualityPrice === 'number') allPrices.push(qualityPrice);
+        }
+      }
     }
-    if (typeof firstSize === 'number') return `$${firstSize.toFixed(2)}/image`;
-  }
-
-  // Video models: per second
-  if (pricing.per_second != null) {
-    return `$${pricing.per_second.toFixed(2)}/sec`;
+    if (allPrices.length > 0) {
+      const min = Math.min(...allPrices);
+      const max = Math.max(...allPrices);
+      if (min === max) {
+        return `$${min.toFixed(3)}/image`;
+      }
+      return `$${min.toFixed(3)}-$${max.toFixed(3)}/image`;
+    }
   }
 
   // TTS/STT: per minute (gpt-4o-mini-tts, whisper)
@@ -586,9 +691,16 @@ function formatModelPrice(pricing, capability) {
   if (pricing.per_1m_characters != null) {
     return `$${pricing.per_1m_characters.toFixed(2)}/1M chars`;
   }
-  // Google TTS has multiple tiers — show standard
+  // Google TTS has multiple tiers — show standard and premium
   if (pricing.standard_per_1m_characters != null) {
-    return `$${pricing.standard_per_1m_characters.toFixed(2)}/1M chars`;
+    let result = `$${pricing.standard_per_1m_characters.toFixed(2)}/1M chars`;
+    if (pricing.wavenet_per_1m_characters) {
+      result += ` ($${pricing.wavenet_per_1m_characters.toFixed(2)} WaveNet)`;
+    }
+    if (pricing.neural2_per_1m_characters) {
+      result += ` ($${pricing.neural2_per_1m_characters.toFixed(2)} Neural2)`;
+    }
+    return result;
   }
 
   // ElevenLabs credit-based pricing

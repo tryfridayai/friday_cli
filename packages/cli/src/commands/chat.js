@@ -2,7 +2,7 @@
  * friday chat — Interactive conversation with the agent runtime
  *
  * Spawns the runtime's stdio transport (friday-server.js) as a child process
- * and provides a readline-based REPL with clean, user-friendly output.
+ * and provides a bottom-pinned input bar with clean, user-friendly output.
  *
  * Use --verbose to see raw debug output (session IDs, tool inputs, etc.)
  */
@@ -11,7 +11,6 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import readline from 'readline';
 import { fileURLToPath } from 'url';
 
 // ── Chat modules ─────────────────────────────────────────────────────────
@@ -27,6 +26,7 @@ import {
 import { checkPreQueryHint, checkPostResponseHint } from './chat/smartAffordances.js';
 import { runtimeDir } from '../resolveRuntime.js';
 import { loadApiKeysToEnv } from '../secureKeyStore.js';
+import InputLine from './chat/inputLine.js';
 const serverScript = path.join(runtimeDir, 'friday-server.js');
 
 // ── Tool humanization ────────────────────────────────────────────────────
@@ -345,11 +345,17 @@ export default async function chat(args) {
     process.exit(code ?? 0);
   });
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: PROMPT_STRING,
-  });
+  // ── InputLine (replaces readline) ──────────────────────────────────────
+
+  const inputLine = new InputLine();
+
+  // Compatibility adapter for slashCommands.js (expects ctx.rl)
+  const rlCompat = {
+    pause()  { inputLine.pause(); },
+    resume() { inputLine.resume(); },
+    prompt() { inputLine.prompt(); },
+    close()  { inputLine.destroy(); },
+  };
 
   let sessionId = null;
   let pendingPermission = null;
@@ -357,6 +363,14 @@ export default async function chat(args) {
   const rulePromptQueue = [];
   let isStreaming = false;
   let accumulatedResponse = ''; // Track response text for post-response hints
+
+  // ── Permission queue (fixes issues b & c) ──────────────────────────────
+  // Multiple permission_request messages can arrive simultaneously.
+  // We queue them and show only one selectOption at a time, preventing
+  // stacked prompts and the `tool_use ids must be unique` API error.
+
+  const permissionQueue = [];
+  let showingPermission = false;
 
   const spinner = createSpinner();
 
@@ -381,6 +395,73 @@ export default async function chat(args) {
     if (approved) {
       spinner.start('Working');
     }
+  }
+
+  /**
+   * Display the next queued permission prompt. Only one is shown at a time.
+   * When the user responds, processNextPermission() is called again to
+   * dequeue the next one (if any).
+   */
+  function processNextPermission() {
+    if (showingPermission) return; // one at a time
+    if (permissionQueue.length === 0) return;
+
+    showingPermission = true;
+    const msg = permissionQueue.shift();
+    pendingPermission = msg;
+
+    if (spinner.active) {
+      spinner.stop();
+    }
+    if (isStreaming) {
+      process.stdout.write('\n');
+      isStreaming = false;
+    }
+
+    console.log('');
+    console.log(`${YELLOW}${BOLD}Permission needed:${RESET} ${humanizePermission(msg.tool_name, msg.description)}`);
+    if (msg.tool_input) {
+      const entries = Object.entries(msg.tool_input);
+      const preview = entries.slice(0, 3).map(([k, v]) => {
+        const val = typeof v === 'string' ? v : JSON.stringify(v);
+        const short = val.length > 70 ? val.slice(0, 67) + '...' : val;
+        return `  ${DIM}${k}: ${short}${RESET}`;
+      });
+      preview.forEach((line) => console.log(line));
+      if (entries.length > 3) {
+        console.log(`  ${DIM}...and ${entries.length - 3} more${RESET}`);
+      }
+    }
+    console.log('');
+    selectOption(
+      [
+        { label: 'Allow', value: 'allow' },
+        { label: 'Allow for this session', value: 'session' },
+        { label: 'Deny', value: 'deny' },
+      ],
+      { rl: rlCompat }
+    ).then((choice) => {
+      showingPermission = false;
+
+      if (!pendingPermission) {
+        // Permission was cancelled while user was choosing
+        inputLine.prompt();
+        processNextPermission();
+        return;
+      }
+      if (choice.value === 'deny') {
+        sendPermissionResponse(false, {});
+      } else {
+        sendPermissionResponse(true, {});
+      }
+
+      // Process next queued permission (if any)
+      if (permissionQueue.length > 0) {
+        processNextPermission();
+      } else {
+        inputLine.prompt();
+      }
+    });
   }
 
   function showRulePrompt() {
@@ -431,7 +512,7 @@ export default async function chat(args) {
   // ── Slash command context ──────────────────────────────────────────────
 
   const slashCtx = {
-    get rl() { return rl; },
+    get rl() { return rlCompat; },
     get sessionId() { return sessionId; },
     get workspacePath() { return workspacePath; },
     get verbose() { return verbose; },
@@ -476,7 +557,8 @@ export default async function chat(args) {
         case 'ready':
           console.log(renderWelcome());
           console.log('');
-          rl.prompt();
+          inputLine.init();
+          inputLine.prompt();
           break;
 
         case 'session':
@@ -526,54 +608,19 @@ export default async function chat(args) {
           break;
 
         case 'permission_request':
-          pendingPermission = msg;
-          if (spinner.active) {
-            spinner.stop();
-          }
-          if (isStreaming) {
-            process.stdout.write('\n');
-            isStreaming = false;
-          }
-          console.log('');
-          console.log(`${YELLOW}${BOLD}Permission needed:${RESET} ${humanizePermission(msg.tool_name, msg.description)}`);
-          if (msg.tool_input) {
-            const entries = Object.entries(msg.tool_input);
-            const preview = entries.slice(0, 3).map(([k, v]) => {
-              const val = typeof v === 'string' ? v : JSON.stringify(v);
-              const short = val.length > 70 ? val.slice(0, 67) + '...' : val;
-              return `  ${DIM}${k}: ${short}${RESET}`;
-            });
-            preview.forEach((line) => console.log(line));
-            if (entries.length > 3) {
-              console.log(`  ${DIM}...and ${entries.length - 3} more${RESET}`);
-            }
-          }
-          console.log('');
-          selectOption(
-            [
-              { label: 'Allow', value: 'allow' },
-              { label: 'Allow for this session', value: 'session' },
-              { label: 'Deny', value: 'deny' },
-            ],
-            { rl }
-          ).then((choice) => {
-            if (!pendingPermission) {
-              // Permission was cancelled while user was choosing
-              rl.prompt();
-              return;
-            }
-            if (choice.value === 'deny') {
-              sendPermissionResponse(false, {});
-            } else {
-              sendPermissionResponse(true, {});
-            }
-            rl.prompt();
-          });
+          // Queue the permission and process one at a time (fixes issues b & c)
+          permissionQueue.push(msg);
+          processNextPermission();
           break;
 
         case 'permission_cancelled':
           if (pendingPermission && pendingPermission.permission_id === msg.permission_id) {
             pendingPermission = null;
+          }
+          // Also remove from queue if still pending
+          const cancelIdx = permissionQueue.findIndex(p => p.permission_id === msg.permission_id);
+          if (cancelIdx !== -1) {
+            permissionQueue.splice(cancelIdx, 1);
           }
           break;
 
@@ -590,7 +637,7 @@ export default async function chat(args) {
             spinner.stop();
           }
           console.log(`\n${RED}Error: ${msg.message}${RESET}`);
-          rl.prompt();
+          inputLine.prompt();
           break;
 
         case 'complete':
@@ -617,7 +664,7 @@ export default async function chat(args) {
             }
             accumulatedResponse = '';
           }
-          rl.prompt();
+          inputLine.prompt();
           break;
 
         default:
@@ -636,7 +683,8 @@ export default async function chat(args) {
     switch (msg.type) {
       case 'ready':
         console.log('Friday is ready. Type your prompt to begin.');
-        rl.prompt();
+        inputLine.init();
+        inputLine.prompt();
         break;
       case 'session':
         sessionId = msg.session_id;
@@ -652,21 +700,9 @@ export default async function chat(args) {
         process.stdout.write(msg.text || msg.content || '');
         break;
       case 'permission_request':
-        pendingPermission = msg;
-        console.log('\n=== Permission Request ==========================');
-        console.log(`Tool : ${msg.tool_name}`);
-        console.log(`Desc : ${msg.description}`);
-        if (msg.tool_input) {
-          const keys = Object.keys(msg.tool_input);
-          console.log('Input:');
-          keys.slice(0, 5).forEach((key) => {
-            console.log(`  ${key}: ${JSON.stringify(msg.tool_input[key])}`);
-          });
-          if (keys.length > 5) console.log(`  ...and ${keys.length - 5} more`);
-        }
-        console.log('Type :allow or :deny to respond.');
-        console.log('===============================================\n');
-        rl.prompt();
+        // Queue the permission in verbose mode too
+        permissionQueue.push(msg);
+        processNextPermission();
         break;
       case 'permission_cancelled':
         if (pendingPermission && pendingPermission.permission_id === msg.permission_id) {
@@ -683,7 +719,7 @@ export default async function chat(args) {
         break;
       case 'complete':
         console.log('');
-        rl.prompt();
+        inputLine.prompt();
         break;
       default:
         if (msg.type === 'tool_use') {
@@ -726,10 +762,10 @@ export default async function chat(args) {
     return API_KEY_PATTERNS.some(pattern => pattern.test(text));
   }
 
-  rl.on('line', async (input) => {
+  inputLine.onSubmit(async (input) => {
     const line = input.trim();
     if (!line) {
-      rl.prompt();
+      inputLine.prompt();
       return;
     }
 
@@ -737,13 +773,13 @@ export default async function chat(args) {
     // This is a fallback in case askSecret leaks input to readline buffer
     if (looksLikeApiKey(line)) {
       // Silently ignore - don't alarm the user, just don't send to agent
-      rl.prompt();
+      inputLine.prompt();
       return;
     }
 
     // Ignore input while processing a slash command (e.g., leaked from askSecret)
     if (processingSlashCommand) {
-      rl.prompt();
+      inputLine.prompt();
       return;
     }
 
@@ -774,7 +810,7 @@ export default async function chat(args) {
           console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/quit${RESET}`);
           spinner.stop();
           backend.kill();
-          rl.close();
+          inputLine.destroy();
           return;
         case 'new':
           console.log(`${ORANGE}Hint:${RESET} ${DIM}Commands now use / prefix. Try ${BOLD}/new${RESET}`);
@@ -834,7 +870,7 @@ export default async function chat(args) {
             return;
           }
       }
-      rl.prompt();
+      inputLine.prompt();
       return;
     }
 
@@ -848,11 +884,5 @@ export default async function chat(args) {
     accumulatedResponse = '';
     spinner.start('Thinking');
     writeMessage({ type: 'query', message: line, session_id: sessionId });
-  });
-
-  rl.on('close', () => {
-    spinner.stop();
-    backend.kill('SIGINT');
-    process.exit(0);
   });
 }
