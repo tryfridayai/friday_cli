@@ -1,19 +1,32 @@
 # Friday AI
 
-An autonomous AI agent for your terminal. Chat with AI, build apps, research topics, automate tasks — all from the command line.
+An autonomous AI agent that works natively across all your devices. Multi-modal, connects to 30+ AI models, and can create applications, generate media, access your tools, and schedule tasks — from the terminal or the desktop.
 
 [![npm version](https://img.shields.io/npm/v/@tryfridayai/cli.svg)](https://www.npmjs.com/package/@tryfridayai/cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Architecture
+
+Friday is built as three layers — a portable runtime that any client can use:
+
+| Package | Description |
+|---------|-------------|
+| **`packages/runtime`** | **friday-runtime** — The core agent. Model routing, MCP servers, tool execution, permission sandboxing, streaming. Connects to 30+ models (OpenAI, Google, Anthropic, ElevenLabs). |
+| **`packages/cli`** | **@tryfridayai/cli** — Terminal interface. Chat, generate media, run commands, manage plugins, schedule agents. Published on npm. |
+| **`packages/desktop`** | **Friday AI: Studio** — Electron desktop app. Media creation studio with image/video/voice generation, gallery, live preview. |
+
 ## Features
 
 - **Autonomous Agent** — Friday can read files, write code, run commands, and iterate on tasks
-- **Multi-Modal AI** — Generate images, videos, and audio with OpenAI, Google, and ElevenLabs
+- **Multi-Modal AI** — Generate images (DALL-E, Imagen), videos (Sora, Veo), and audio (OpenAI TTS, ElevenLabs, Google WaveNet)
 - **MCP Servers** — Extensible tool ecosystem via Model Context Protocol
 - **Secure by Design** — API keys stored in system keychain, never exposed to agent
 - **Scheduled Agents** — Automate recurring tasks with cron-based scheduling
+- **Two Clients, One Runtime** — CLI and Desktop Studio both run on the same friday-runtime
 
 ## Quick Start
+
+### CLI
 
 ```bash
 # Install globally
@@ -26,10 +39,27 @@ friday chat
 # Type /keys in chat to configure
 ```
 
+### Desktop (Friday AI: Studio)
+
+```bash
+# Clone the repo
+git clone https://github.com/tryfridayai/friday_cli.git
+cd friday_cli
+
+# Install dependencies
+npm install
+
+# Run the desktop app in development
+npm run dev:electron
+```
+
+The desktop app starts both the Vite dev server (React UI) and the Electron shell. It automatically spawns friday-runtime as a backend process.
+
 ## Requirements
 
 - Node.js 18+
 - At least one API key: Anthropic, OpenAI, or Google AI
+- For desktop: macOS (native title bar), Linux, or Windows
 
 ## Commands
 
@@ -46,14 +76,14 @@ friday chat --verbose    # Show debug output
 | `/keys` | Add/update API keys (secure keychain storage) |
 | `/status` | Session info, costs, capabilities |
 | `/plugins` | Install/uninstall/list plugins |
-| `/models` | List available AI models |
+| `/model` | Browse and toggle AI models |
 | `/schedule` | Manage scheduled agents |
 | `/new` | Start new session |
 | `/quit` | Exit |
 
 ## API Keys
 
-Friday supports multiple AI providers. Add keys via `/keys` command:
+Friday supports multiple AI providers. Add keys via `/keys` (CLI) or Settings > API Keys (Desktop):
 
 | Provider | Key | Capabilities |
 |----------|-----|--------------|
@@ -69,16 +99,23 @@ Keys are stored securely in your system keychain (macOS Keychain, Windows Creden
 ```
 friday/
 ├── packages/
-│   ├── cli/                 # Command-line interface (@tryfridayai/cli)
-│   │   ├── bin/             # Entry points
-│   │   └── src/             # CLI source code
-│   └── runtime/             # Agent runtime (friday-runtime)
-│       ├── src/             # Runtime source code
-│       ├── mcp-servers/     # MCP server implementations
-│       └── providers/       # AI provider adapters
-├── CHANGELOG.md             # Version history
-├── CLAUDE.md                # AI assistant instructions
-└── README.md                # This file
+│   ├── cli/                    # CLI package (@tryfridayai/cli)
+│   │   ├── bin/                # Entry points (friday.js)
+│   │   └── src/                # CLI source — commands, keystore, input
+│   ├── runtime/                # Agent runtime (friday-runtime)
+│   │   ├── src/                # Runtime, providers, sandbox, MCP credentials
+│   │   ├── mcp-servers/        # MCP server implementations
+│   │   └── friday-server.js    # Standalone server entry point
+│   └── desktop/                # Electron desktop app (Friday AI: Studio)
+│       ├── electron/           # Main process, preload, IPC handlers
+│       ├── src/                # React UI — components, store, themes
+│       │   ├── components/     # Chat, home, preview, settings, agents
+│       │   ├── store/          # Zustand state management
+│       │   └── lib/            # Themes, utilities
+│       └── package.json
+├── CHANGELOG.md                # Version history
+├── CLAUDE.md                   # AI assistant instructions
+└── README.md                   # This file
 ```
 
 ## MCP Servers
@@ -109,14 +146,17 @@ Friday is designed with security as a priority:
 
 ```bash
 # Clone the repo
-git clone https://github.com/tryfridayai/friday.git
-cd friday
+git clone https://github.com/tryfridayai/friday_cli.git
+cd friday_cli
 
 # Install dependencies
 npm install
 
 # Run CLI in development
 node packages/cli/bin/friday.js chat
+
+# Run desktop app in development
+npm run dev:electron
 ```
 
 ## Contributing
@@ -131,4 +171,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - **Website**: [tryfriday.ai](https://tryfriday.ai)
 - **npm**: [@tryfridayai/cli](https://www.npmjs.com/package/@tryfridayai/cli)
-- **GitHub**: [tryfridayai/friday](https://github.com/tryfridayai/friday)
+- **GitHub**: [tryfridayai/friday_cli](https://github.com/tryfridayai/friday_cli)
