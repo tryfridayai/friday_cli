@@ -1,0 +1,170 @@
+import { useEffect } from 'react';
+import useStore from './store/useStore';
+import { applyTheme } from './lib/themes';
+import Sidebar from './components/layout/Sidebar';
+import HomePage from './components/home/HomePage';
+import ChatView from './components/chat/ChatView';
+import PreviewPanel from './components/preview/PreviewPanel';
+import ResizeHandle from './components/layout/ResizeHandle';
+import SettingsModal from './components/settings/SettingsModal';
+
+export default function App() {
+  const view = useStore((s) => s.view);
+  const theme = useStore((s) => s.theme);
+  const showSettings = useStore((s) => s.showSettings);
+  const previewOpen = useStore((s) => s.previewOpen);
+
+  // Apply theme
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  // Wire up backend events
+  useEffect(() => {
+    if (!window.friday) return;
+
+    const unsubscribe = window.friday.onBackendMessage((msg) => {
+      const store = useStore.getState();
+
+      switch (msg.type) {
+        case 'ready':
+          store.setBackendReady(true);
+          store.loadSessions();
+          store.loadApiKeys();
+          // Request MCP servers
+          window.friday.getMcpServers();
+          break;
+
+        case 'session':
+          store.setSessionId(msg.session_id);
+          break;
+
+        case 'thinking':
+          store.setIsThinking(true);
+          store.setThinkingText(msg.content || '');
+          break;
+
+        case 'thinking_complete':
+          store.setIsThinking(false);
+          break;
+
+        case 'chunk': {
+          const text = msg.text || msg.content || '';
+          if (text) {
+            store.setIsThinking(false);
+            store.appendToLastAssistant(text);
+          }
+          break;
+        }
+
+        case 'tool_use':
+          store.setCurrentTool({ toolName: msg.tool_name, toolInput: msg.tool_input });
+          store.setIsThinking(false);
+          break;
+
+        case 'tool_result':
+          store.setCurrentTool(null);
+          break;
+
+        case 'permission_request':
+          store.setPermissionRequest(msg);
+          store.setIsThinking(false);
+          store.setCurrentTool(null);
+          break;
+
+        case 'permission_cancelled':
+          if (store.permissionRequest?.permission_id === msg.permission_id) {
+            store.setPermissionRequest(null);
+          }
+          break;
+
+        case 'complete':
+          store.setIsStreaming(false);
+          store.setIsThinking(false);
+          store.setCurrentTool(null);
+          if (msg.cost) store.setLastCost(msg.cost);
+          break;
+
+        case 'error':
+          store.setIsStreaming(false);
+          store.setIsThinking(false);
+          store.setCurrentTool(null);
+          store.addMessage({ role: 'system', content: `Error: ${msg.message}` });
+          break;
+
+        case 'info':
+          // Silent in UI unless it's important
+          break;
+
+        case 'session_reset':
+          store.clearMessages();
+          store.setSessionId(null);
+          store.setView('home');
+          break;
+
+        // MCP
+        case 'mcp_servers_list':
+          store.setMcpServers(msg.servers || []);
+          break;
+
+        case 'mcp_credentials_updated':
+          // Refresh server list
+          if (window.friday) window.friday.getMcpServers();
+          break;
+
+        case 'mcp_credentials_deleted':
+          if (window.friday) window.friday.getMcpServers();
+          break;
+
+        // Scheduled agents
+        case 'scheduled_agent:list':
+          store.setScheduledAgents(msg.agents || []);
+          break;
+
+        case 'scheduled_agent:created':
+        case 'scheduled_agent:updated':
+        case 'scheduled_agent:deleted':
+        case 'scheduled_agent:toggled':
+          // Refresh list
+          if (window.friday) {
+            window.friday.sendToBackend({ type: 'scheduled_agent:list', userId: 'default' });
+          }
+          break;
+
+        default:
+          break;
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden">
+      {/* Sidebar */}
+      <Sidebar />
+
+      {/* Main content */}
+      <div className="flex flex-1 min-w-0">
+        {/* Primary panel */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* macOS title bar spacer */}
+          <div className="drag-region h-10 flex-shrink-0 bg-surface-0" />
+
+          {view === 'home' ? <HomePage /> : <ChatView />}
+        </div>
+
+        {/* Resize handle + Preview panel */}
+        {previewOpen && (
+          <>
+            <ResizeHandle />
+            <PreviewPanel />
+          </>
+        )}
+      </div>
+
+      {/* Settings modal */}
+      {showSettings && <SettingsModal />}
+    </div>
+  );
+}

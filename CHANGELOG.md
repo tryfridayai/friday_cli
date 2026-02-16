@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 2026-02-15
 
 #### Added
+- **Desktop client (`packages/desktop`)** — Electron desktop app for Friday AI, powered by the same `packages/runtime` as the CLI. Features: React + Vite + Tailwind UI, Zustand state management, Framer Motion animations, streaming chat with markdown rendering, permission prompts, thinking/tool-use indicators, API key management via keytar (OS keychain), MCP app store with credential/OAuth flows, scheduled agents panel, media preview (image/audio/video), session history, theme system (dark/light/midnight), and macOS-native title bar. Demonstrates that `friday-runtime` can power any client interface.
 - **Redesigned welcome screen** — Gemini CLI-inspired startup with ASCII art of the Friday logo (two vertical bars + block-letter FRIDAY), modern capability indicators (filled/empty circles for Chat, Images, Voice, Video), and streamlined hint line. Removed plugin focus, emoji icons, and box frame.
 - **Bottom-pinned input bar** (`inputLine.js`) — User input is now pinned to the bottom of the terminal with a separator line, preventing output from overwriting or mixing with the input prompt. Uses ANSI scroll regions to confine agent output above the separator while the prompt stays fixed at the bottom row.
 - **Command history** — Up/Down arrow keys cycle through the last 50 commands in a ring buffer. Full cursor editing (Left/Right, Home/End, Ctrl+A/E/U/K/W, Delete) supported.
