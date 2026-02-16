@@ -10,20 +10,22 @@
  *    into a single message instead of discarding all but the first line.
  *  - Input area: output and input no longer intermix — the prompt is always
  *    visible at the bottom of the terminal.
+ *
+ * How it works:
+ *  - ANSI scroll region confines output to rows 1..N-2
+ *  - Row N-1: dim separator line
+ *  - Row N: input prompt with editable text
+ *  - stdout is patched: writes are redirected into the scroll region using
+ *    SCO cursor save/restore (\x1b[s / \x1b[u) to track the output position,
+ *    then cursor jumps back to the input line.
+ *  - The scroll region handles line wrapping and scrolling natively —
+ *    no explicit \n is injected per write.
  */
 
 import { PURPLE, RESET, BOLD, DIM } from './ui.js';
 
 const HISTORY_MAX = 50;
 
-/**
- * InputLine — a bottom-pinned input bar using ANSI scroll regions.
- *
- * Layout:
- *   Rows 1..N-2  — scroll region (output)
- *   Row  N-1     — dim separator (─────)
- *   Row  N       — input prompt  (f > ...)
- */
 export default class InputLine {
   constructor() {
     this._buf = '';          // current input buffer
@@ -45,10 +47,6 @@ export default class InputLine {
 
   // ── Public API ──────────────────────────────────────────────────────
 
-  /**
-   * Initialize the input line: set up scroll region, separator, input line,
-   * patch stdout, and start listening for keystrokes.
-   */
   init() {
     if (this._active) return;
     this._active = true;
@@ -56,32 +54,40 @@ export default class InputLine {
     this._rows = process.stdout.rows || 24;
     this._cols = process.stdout.columns || 80;
 
-    // Set up scroll region (rows 1 to N-2)
+    // Set scroll region (rows 1..N-2) — output is confined here
     this._setScrollRegion();
 
-    // Draw separator and input line
+    // Draw separator and clear input row
     this._drawChrome();
 
-    // Patch stdout.write to keep output in scroll region
+    // Position output cursor at bottom of scroll region and save it
+    // using SCO save (\x1b[s). The patched stdout will restore/save
+    // this position on every write so the output cursor tracks correctly.
+    const scrollEnd = Math.max(1, this._rows - 2);
+    this._writeRaw(`\x1b[${scrollEnd};1H`);
+    this._writeRaw('\x1b[s');  // SCO save — output cursor position
+
+    // Patch stdout.write to redirect output into the scroll region
     this._patchStdout();
 
-    // Listen for resize
+    // Listen for terminal resize
     this._onResize = () => {
       this._rows = process.stdout.rows || 24;
       this._cols = process.stdout.columns || 80;
       this._setScrollRegion();
       this._drawChrome();
+      // Re-save output cursor at bottom of new scroll region
+      const end = Math.max(1, this._rows - 2);
+      this._writeRaw(`\x1b[${end};1H`);
+      this._writeRaw('\x1b[s');
       this._renderInput();
     };
     process.stdout.on('resize', this._onResize);
 
-    // Start raw mode keystroke handling
+    // Start raw-mode keystroke handling
     this._startRawInput();
   }
 
-  /**
-   * Tear down: restore scroll region, unpatch stdout, stop raw mode.
-   */
   destroy() {
     if (!this._active) return;
     this._active = false;
@@ -95,71 +101,53 @@ export default class InputLine {
 
     this._unpatchStdout();
 
-    // Reset scroll region to full terminal
-    this._write(`\x1b[r`);
-    // Move cursor to bottom
-    this._write(`\x1b[${this._rows};1H`);
-    this._write('\n');
+    // Reset scroll region to full terminal and move cursor to bottom
+    this._writeRaw('\x1b[r');
+    this._writeRaw(`\x1b[${this._rows};1H\n`);
   }
 
-  /**
-   * Register the submit callback (called when user presses Enter).
-   * @param {(line: string) => void} cb
-   */
   onSubmit(cb) {
     this._submitCb = cb;
   }
 
-  /**
-   * Redraw the input line. Call after output that may have scrolled.
-   */
   prompt() {
     if (!this._active || this._paused) return;
     this._renderInput();
   }
 
-  /**
-   * Pause input handling (for selectOption / askSecret).
-   * Restores normal terminal mode so other raw-mode readers work.
-   */
   pause() {
     if (this._paused) return;
     this._paused = true;
     this._stopRawInput();
-    // Reset scroll region so selectOption can render anywhere
-    this._write(`\x1b[r`);
+    // Reset scroll region so selectOption / askSecret can render anywhere
+    this._writeRaw('\x1b[r');
   }
 
-  /**
-   * Resume input handling after pause.
-   */
   resume() {
     if (!this._paused) return;
     this._paused = false;
 
-    // Recalculate dimensions in case terminal was resized
     this._rows = process.stdout.rows || 24;
     this._cols = process.stdout.columns || 80;
 
     this._setScrollRegion();
     this._drawChrome();
+
+    // Re-save output cursor at bottom of scroll region
+    const scrollEnd = Math.max(1, this._rows - 2);
+    this._writeRaw(`\x1b[${scrollEnd};1H`);
+    this._writeRaw('\x1b[s');
+
     this._startRawInput();
     this._renderInput();
   }
 
-  /**
-   * Get the current input buffer contents.
-   */
   getLine() {
     return this._buf;
   }
 
-  /**
-   * Simulate a close event (for compat with rl.close()).
-   */
   close() {
     this.destroy();
-    // Exit gracefully
     process.exit(0);
   }
 
@@ -167,59 +155,65 @@ export default class InputLine {
 
   _setScrollRegion() {
     const scrollEnd = Math.max(1, this._rows - 2);
-    this._write(`\x1b[1;${scrollEnd}r`);
+    this._writeRaw(`\x1b[1;${scrollEnd}r`);
   }
 
+  /**
+   * Draw the separator line on row N-1 and clear the input row N.
+   * These rows are OUTSIDE the scroll region, so scrolling never touches them.
+   * Only needs to be called on init, resize, and resume — not on every write.
+   */
   _drawChrome() {
     const sepRow = this._rows - 1;
     const inputRow = this._rows;
 
-    // Draw separator on row N-1
-    this._write(`\x1b[${sepRow};1H`);
-    this._write(`\x1b[2K`); // clear line
-    this._write(`${DIM}${'─'.repeat(this._cols)}${RESET}`);
-
-    // Clear input row
-    this._write(`\x1b[${inputRow};1H`);
-    this._write(`\x1b[2K`);
+    this._writeRaw(`\x1b[${sepRow};1H\x1b[2K`);
+    this._writeRaw(`${DIM}${'─'.repeat(this._cols)}${RESET}`);
+    this._writeRaw(`\x1b[${inputRow};1H\x1b[2K`);
   }
 
+  /**
+   * Render the input prompt and buffer on row N, then place the cursor there.
+   * Uses absolute positioning only — does not disturb the SCO-saved output cursor.
+   */
   _renderInput() {
     if (!this._active || this._paused) return;
     const inputRow = this._rows;
 
-    // Save cursor, move to input row, clear it, write prompt + buffer, restore
-    this._write('\x1b7');  // save cursor
-    this._write(`\x1b[${inputRow};1H`);
-    this._write('\x1b[2K'); // clear line
+    // Clear input row and draw prompt + buffer
+    this._writeRaw(`\x1b[${inputRow};1H\x1b[2K`);
 
-    // Truncate buffer display if wider than terminal
     const maxBufLen = this._cols - this._promptLen - 1;
     let displayBuf = this._buf;
     let displayCursor = this._cursor;
 
     if (displayBuf.length > maxBufLen) {
-      // Show a window around cursor
       const start = Math.max(0, this._cursor - Math.floor(maxBufLen / 2));
       displayBuf = displayBuf.slice(start, start + maxBufLen);
       displayCursor = this._cursor - start;
     }
 
-    this._write(this._promptStr + displayBuf);
+    this._writeRaw(this._promptStr + displayBuf);
 
-    // Position cursor
+    // Place visible cursor on input line
     const cursorCol = this._promptLen + displayCursor + 1;
-    this._write(`\x1b[${inputRow};${cursorCol}H`);
-    this._write('\x1b8');  // restore cursor
-
-    // Actually place cursor on input line so it blinks there
-    this._write(`\x1b[${inputRow};${cursorCol}H`);
+    this._writeRaw(`\x1b[${inputRow};${cursorCol}H`);
   }
 
   // ── stdout interception ────────────────────────────────────────────
 
+  /**
+   * Patch process.stdout.write so that ALL output is redirected into the
+   * scroll region while the visible cursor stays on the input line.
+   *
+   * Uses SCO save/restore (\x1b[s / \x1b[u) to track the output cursor
+   * position inside the scroll region across writes. This allows:
+   *  - Spinner: writes \r to overwrite in place → cursor stays on same row
+   *  - Streaming: partial writes accumulate on same row
+   *  - console.log: trailing \n causes the scroll region to scroll naturally
+   */
   _patchStdout() {
-    if (this._originalWrite) return; // already patched
+    if (this._originalWrite) return;
     this._originalWrite = process.stdout.write.bind(process.stdout);
 
     const self = this;
@@ -228,17 +222,18 @@ export default class InputLine {
         return self._originalWrite(data, encoding, callback);
       }
 
-      // Move cursor to end of scroll region and write there
-      const scrollEnd = Math.max(1, self._rows - 2);
-      self._originalWrite(`\x1b7`);  // save cursor
-      self._originalWrite(`\x1b[${scrollEnd};1H`); // go to bottom of scroll region
-      self._originalWrite('\n'); // scroll up by one line
-      self._originalWrite(`\x1b[${scrollEnd};1H`); // position at bottom of scroll region
+      // Restore the output cursor in the scroll region (SCO restore)
+      self._originalWrite('\x1b[u');
+
+      // Write the data at the output cursor position
       const result = self._originalWrite(data, encoding, callback);
 
-      // Redraw separator and input (they may have been scrolled over)
-      self._drawChrome();
-      self._renderInput();
+      // Save the new output cursor position (SCO save)
+      self._originalWrite('\x1b[s');
+
+      // Move visible cursor back to the input line
+      const cursorCol = self._promptLen + self._cursor + 1;
+      self._originalWrite(`\x1b[${self._rows};${cursorCol}H`);
 
       return result;
     };
@@ -252,10 +247,10 @@ export default class InputLine {
   }
 
   /**
-   * Write directly to the terminal, bypassing our stdout patch.
-   * Used for drawing chrome / cursor positioning.
+   * Write directly to the terminal, bypassing the stdout patch.
+   * Used for chrome drawing and cursor positioning.
    */
-  _write(data) {
+  _writeRaw(data) {
     const writer = this._originalWrite || process.stdout.write.bind(process.stdout);
     writer(data);
   }
@@ -263,7 +258,7 @@ export default class InputLine {
   // ── Raw keystroke handling ─────────────────────────────────────────
 
   _startRawInput() {
-    if (this._onData) return; // already listening
+    if (this._onData) return;
 
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
@@ -287,10 +282,10 @@ export default class InputLine {
   _handleData(data) {
     const str = data.toString('utf8');
 
-    // Multi-line paste detection: if the chunk contains newline characters,
-    // treat the entire chunk as a single pasted input.
+    // Multi-line paste detection: pasted text arrives as one data event
+    // with embedded newline characters.
     if (str.includes('\n') || str.includes('\r')) {
-      // Check if this is just an Enter keypress (single \r or \n)
+      // Single Enter keypress
       if (str === '\r' || str === '\n' || str === '\r\n') {
         this._submit();
         return;
@@ -323,13 +318,11 @@ export default class InputLine {
       // Ctrl+C
       if (code === 3) {
         if (this._buf.length > 0) {
-          // Clear current input
           this._buf = '';
           this._cursor = 0;
           this._historyIdx = -1;
           this._renderInput();
         } else {
-          // Exit
           this.destroy();
           process.exit(0);
         }
@@ -399,60 +392,49 @@ export default class InputLine {
         i++;
         if (i < str.length && str[i] === '[') {
           i++;
-          // Collect parameter bytes
           let param = '';
           while (i < str.length && str.charCodeAt(i) >= 0x30 && str.charCodeAt(i) <= 0x3f) {
             param += str[i];
             i++;
           }
-          // Final byte
           if (i < str.length) {
             const final = str[i];
             i++;
 
             switch (final) {
-              case 'A': // Up arrow — history previous
-                this._historyUp();
-                break;
-              case 'B': // Down arrow — history next
-                this._historyDown();
-                break;
-              case 'C': // Right arrow
+              case 'A': this._historyUp(); break;
+              case 'B': this._historyDown(); break;
+              case 'C':
                 if (this._cursor < this._buf.length) {
                   this._cursor++;
                   this._renderInput();
                 }
                 break;
-              case 'D': // Left arrow
+              case 'D':
                 if (this._cursor > 0) {
                   this._cursor--;
                   this._renderInput();
                 }
                 break;
-              case 'H': // Home
+              case 'H':
                 this._cursor = 0;
                 this._renderInput();
                 break;
-              case 'F': // End
+              case 'F':
                 this._cursor = this._buf.length;
                 this._renderInput();
                 break;
-              case '~': // Delete (param=3), etc.
-                if (param === '3') {
-                  // Delete key
-                  if (this._cursor < this._buf.length) {
-                    this._buf = this._buf.slice(0, this._cursor) + this._buf.slice(this._cursor + 1);
-                    this._renderInput();
-                  }
+              case '~':
+                if (param === '3' && this._cursor < this._buf.length) {
+                  this._buf = this._buf.slice(0, this._cursor) + this._buf.slice(this._cursor + 1);
+                  this._renderInput();
                 }
                 break;
-              default:
-                break;
+              default: break;
             }
           }
         } else if (i < str.length) {
-          // Alt+key or other ESC sequences — skip
-          i++;
+          i++; // skip Alt+key / other ESC sequences
         }
         continue;
       }
@@ -476,7 +458,6 @@ export default class InputLine {
   _historyUp() {
     if (this._history.length === 0) return;
     if (this._historyIdx === -1) {
-      // Save current buffer before browsing history
       this._savedBuf = this._buf;
     }
     if (this._historyIdx < this._history.length - 1) {
@@ -509,7 +490,6 @@ export default class InputLine {
     this._savedBuf = '';
 
     if (line.length > 0) {
-      // Add to history (most recent first), deduplicate
       if (this._history[0] !== line) {
         this._history.unshift(line);
         if (this._history.length > HISTORY_MAX) {
