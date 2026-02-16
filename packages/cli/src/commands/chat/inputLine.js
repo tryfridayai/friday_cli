@@ -41,8 +41,8 @@ export default class InputLine {
     this._onData = null;     // stdin data handler ref
     this._onResize = null;   // SIGWINCH handler ref
     this._originalWrite = null; // original process.stdout.write
-    this._promptStr = `${PURPLE}f${RESET} ${BOLD}>${RESET} `; // visible prompt
-    this._promptLen = 4;     // visible character length of prompt ("f > ")
+    this._promptStr = `${BOLD}>${RESET} `; // visible prompt
+    this._promptLen = 2;     // visible character length of prompt ("> ")
   }
 
   // ── Public API ──────────────────────────────────────────────────────
@@ -121,6 +121,9 @@ export default class InputLine {
     this._stopRawInput();
     // Reset scroll region so selectOption / askSecret can render anywhere
     this._writeRaw('\x1b[r');
+    // Clear separator and input line, move cursor there so
+    // selectOption / askSecret renders in visible space
+    this._writeRaw(`\x1b[${this._rows - 1};1H\x1b[J`);
   }
 
   resume() {

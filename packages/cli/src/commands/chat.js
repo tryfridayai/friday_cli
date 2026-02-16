@@ -159,7 +159,7 @@ const SPINNER_FRAMES = ['\u280b', '\u2819', '\u2839', '\u2838', '\u283c', '\u283
 function createSpinner() {
   let interval = null;
   let frameIndex = 0;
-  let currentText = 'Thinking';
+  let currentText = 'Friday is thinking';
   let lineLength = 0;
 
   function clear() {
@@ -178,7 +178,7 @@ function createSpinner() {
   }
 
   return {
-    start(text = 'Thinking') {
+    start(text = 'Friday is thinking') {
       currentText = text;
       frameIndex = 0;
       if (interval) clearInterval(interval);
@@ -571,7 +571,7 @@ export default async function chat(args) {
               process.stdout.write('\n');
               isStreaming = false;
             }
-            spinner.start('Thinking');
+            spinner.start('Friday is thinking');
           }
           break;
 
@@ -890,7 +890,7 @@ export default async function chat(args) {
     // Echo user input so it's visible in the scroll region
     console.log(`\n${PURPLE}▸${RESET} ${BOLD}${line}${RESET}`);
     accumulatedResponse = '';
-    spinner.start('Thinking');
+    spinner.start('Friday is thinking');
     writeMessage({ type: 'query', message: line, session_id: sessionId });
   });
 }
