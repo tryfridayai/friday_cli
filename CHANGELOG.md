@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-02-16
+
+#### Changed
+- **Desktop: Rebranded homepage to "Friday AI: Studio"** — Homepage now focuses on media creation (images, voice, video) instead of general coding tasks. Updated prompt suggestions to: Generate an image, Create a voiceover, Generate a video, and Produce media content. Filter chips (Images, Voice, Video, Chat) now filter the prompt grid. Clicking a suggestion populates the input instead of auto-executing.
+
+#### Added
+- **Desktop: Media gallery** — Preview panel now shows a persistent gallery of all media files in `~/FridayWorkspace/generated/`. Category tabs (Images, Audio, Video) with count badges, file list with thumbnails and relative timestamps, sorted by most recent first. Gallery auto-refreshes when the agent generates new media. Click any file to preview it.
+- **Desktop: Resizable preview panel** — Preview panel width can now be dragged via the resize handle between 240px and 640px. Width persists during the session.
+- **Desktop: Open media in system app** — Each file in the media gallery has an "open external" icon that opens the file in the system's default application (e.g. Preview on macOS).
+
+#### Fixed
+- **Desktop: Video/audio playback** — Removed `standard: true` from `friday-media://` scheme registration which was lowercasing URL path components (e.g., `/Users/...` became `/users/...`). Replaced `net.fetch` with direct `fs.readFileSync` serving that provides explicit MIME types and HTTP 206 range request support required for video/audio seeking. Removed non-standard 2MB chunk cap on open-ended range requests (`bytes=0-`) that was preventing Chromium from reading MP4 moov atoms at end-of-file.
+- **Desktop: Send/stop button alignment** — Send and stop buttons are now positioned inside the input field (absolute right-3 bottom-3) instead of as a sibling flex element that could overflow outside the input border.
+- **Desktop: Image/media preview rendering** — Registered custom `friday-media://` Electron protocol to serve local files. The `file://` protocol is blocked by Chromium when the renderer loads from `http://localhost` in dev mode. Images, audio, and video now render correctly in the preview panel.
+- **Desktop: Media preview detection** — Preview panel now detects media file paths (images, audio, video) from assistant text responses, not just tool_result messages. Fixes generated images not appearing in the preview panel.
+- **Desktop: Friday-media shows "Requires setup" when keys already configured** — The Apps pane now cross-references keytar API keys (from the API Keys tab) with MCP servers that depend on them. Friday-media shows "Connected" when OpenAI/Google/ElevenLabs keys are already set, instead of redundantly asking for the same keys.
+- **Desktop: Thinking state after permission approval** — After approving a permission request, the thinking spinner now shows while the agent continues processing, instead of appearing idle.
+- **Desktop: Alternating thinking text** — Thinking indicator now cycles through phrases ("Thinking...", "Getting everything together...", "Processing your request...", etc.) with a spinning loader animation, instead of showing static "Thinking" text.
+- **Desktop: 8-10 keychain prompts on startup** — Replaced 8 individual `keytar.getPassword()` calls (4 in BackendManager + 4 in get-api-key-status) with a single `keytar.findCredentials()` batch read at startup. Subsequent key status queries use the in-memory cache. Keychain prompts now only appear once at startup and once per key save/delete.
+
 ### 2026-02-15
 
 #### Added
+- **Desktop client (`packages/desktop`)** — Electron desktop app for Friday AI, powered by the same `packages/runtime` as the CLI. Features: React + Vite + Tailwind UI, Zustand state management, Framer Motion animations, streaming chat with markdown rendering, permission prompts, thinking/tool-use indicators, API key management via keytar (OS keychain), MCP app store with credential/OAuth flows, scheduled agents panel, media preview (image/audio/video), session history, theme system (dark/light/midnight), and macOS-native title bar. Demonstrates that `friday-runtime` can power any client interface.
 - **Redesigned welcome screen** — Gemini CLI-inspired startup with ASCII art of the Friday logo (two vertical bars + block-letter FRIDAY), modern capability indicators (filled/empty circles for Chat, Images, Voice, Video), and streamlined hint line. Removed plugin focus, emoji icons, and box frame.
 - **Bottom-pinned input bar** (`inputLine.js`) — User input is now pinned to the bottom of the terminal with a separator line, preventing output from overwriting or mixing with the input prompt. Uses ANSI scroll regions to confine agent output above the separator while the prompt stays fixed at the bottom row.
 - **Command history** — Up/Down arrow keys cycle through the last 50 commands in a ring buffer. Full cursor editing (Left/Right, Home/End, Ctrl+A/E/U/K/W, Delete) supported.
