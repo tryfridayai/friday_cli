@@ -1,36 +1,23 @@
 /**
  * chat/welcomeScreen.js — Branded welcome screen for Friday CLI chat
  *
- * Renders on `ready` message. Reads local config files directly
- * (instant, no server round-trip) to show capabilities and plugin status.
+ * Renders on `ready` message. Large ASCII art logo with the two
+ * vertical bars from the Friday brand, followed by capability
+ * indicators and quick-start hints. Inspired by Gemini CLI.
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import {
-  PURPLE, TEAL, DIM, RESET, BOLD, ORANGE,
-  drawBox, capabilityIcon, hint,
-} from './ui.js';
+import { PURPLE, TEAL, DIM, RESET } from './ui.js';
 import { runtimeDir } from '../../resolveRuntime.js';
 
 const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.friday');
-const PLUGINS_FILE = path.join(CONFIG_DIR, 'plugins.json');
 const ENV_FILE = path.join(CONFIG_DIR, '.env');
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function readJsonSafe(filePath) {
-  try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
-  } catch { /* ignore */ }
-  return null;
-}
-
 function envHasKey(keyName) {
-  // Check process.env first, then ~/.friday/.env
   if (process.env[keyName]) return true;
   try {
     if (fs.existsSync(ENV_FILE)) {
@@ -43,7 +30,6 @@ function envHasKey(keyName) {
       }
     }
   } catch { /* ignore */ }
-  // Also check the project-level .env
   try {
     const projectEnv = path.join(runtimeDir, '..', '.env');
     if (fs.existsSync(projectEnv)) {
@@ -59,17 +45,25 @@ function envHasKey(keyName) {
   return false;
 }
 
-// ── Main render ──────────────────────────────────────────────────────────
+// ── Logo colors ─────────────────────────────────────────────────────────
+
+const GRAY_BAR = '\x1b[38;5;245m';    // left bar — gray
+const WHITE_BAR = '\x1b[38;5;255m';   // right bar — bright white
+
+// ── Main render ─────────────────────────────────────────────────────────
 
 /**
- * Render the branded welcome screen.
+ * Render the branded welcome screen with ASCII art logo.
  * @returns {string} The welcome screen string to print
  */
 export function renderWelcome() {
   // Read version from package.json
   let version = '0.2.0';
   try {
-    const cliPkgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', '..', 'package.json');
+    const cliPkgPath = path.resolve(
+      path.dirname(new URL(import.meta.url).pathname),
+      '..', '..', '..', 'package.json',
+    );
     const pkg = JSON.parse(fs.readFileSync(cliPkgPath, 'utf8'));
     version = pkg.version || version;
   } catch { /* ignore */ }
@@ -80,70 +74,56 @@ export function renderWelcome() {
   const hasGoogle = envHasKey('GOOGLE_API_KEY');
   const hasElevenLabs = envHasKey('ELEVENLABS_API_KEY');
 
-  // Determine capabilities
   const chatOk = hasAnthropic || hasOpenAI || hasGoogle;
   const imageOk = hasOpenAI || hasGoogle;
   const voiceOk = hasOpenAI || hasElevenLabs || hasGoogle;
   const videoOk = hasOpenAI || hasGoogle;
 
-  // Read installed plugins
-  const pluginsData = readJsonSafe(PLUGINS_FILE);
-  const installedPlugins = pluginsData?.plugins ? Object.keys(pluginsData.plugins) : [];
+  // ── ASCII art: two bars (logo) + block-letter FRIDAY ──────────────
+  //
+  // Layout:  ██  ██  FRIDAY (block text)
+  //
+  // Bars extend 2 rows above and below the text for visual weight.
+  // Left bar is gray, right bar is bright white, text is brand purple.
 
-  // Read catalog for total count
-  let totalPlugins = 0;
-  let installedNames = [];
-  try {
-    const catalogPath = path.join(runtimeDir, 'src', 'plugins', 'catalog.json');
-    const catalog = readJsonSafe(catalogPath);
-    if (catalog?.plugins) {
-      totalPlugins = Object.keys(catalog.plugins).length;
-      installedNames = installedPlugins
-        .map(id => catalog.plugins[id]?.name || id)
-        .filter(Boolean);
-    }
-  } catch { /* ignore */ }
+  const B = (row) => `    ${GRAY_BAR}██${RESET}  ${WHITE_BAR}██${RESET}${row}`;
 
-  // Build capability line
-  const caps = [
-    capabilityIcon('\ud83d\udcac', 'Chat', chatOk),
-    capabilityIcon('\ud83c\udfa8', 'Images', imageOk),
-    capabilityIcon('\ud83d\udd0a', 'Voice', voiceOk),
-    capabilityIcon('\ud83c\udfac', 'Video', videoOk),
-  ].join('   ');
-
-  // Build plugin line
-  let pluginLine;
-  if (installedNames.length > 0) {
-    const names = installedNames.slice(0, 4).join(', ');
-    const suffix = installedNames.length > 4 ? ` +${installedNames.length - 4} more` : '';
-    pluginLine = `  Plugins: ${TEAL}${names}${suffix}${RESET}`;
-    pluginLine += `${DIM}  ${installedNames.length} of ${totalPlugins} installed${RESET}`;
-  } else {
-    pluginLine = `  ${DIM}Plugins: none installed${RESET}${DIM}  0 of ${totalPlugins} available${RESET}`;
-  }
-
-  // Build missing-key hints
-  const hints = [];
-  if (!imageOk || !voiceOk || !videoOk) {
-    hints.push(`  ${DIM}\u2191 ${ORANGE}/keys${DIM} to enable more capabilities${RESET}`);
-  }
-
-  // Assemble box content
-  const boxLines = [
-    '',
-    `  ${caps}`,
-    '',
-    pluginLine,
-    '',
-    `  Type ${BOLD}/help${RESET} for commands, or just start talking.`,
+  const art = [
+    B(''),
+    B(''),
+    B(`  ${PURPLE}█████ ████  ███ ████   ███  █   █${RESET}`),
+    B(`  ${PURPLE}█     █   █  █  █   █ █   █  █ █${RESET}`),
+    B(`  ${PURPLE}████  ████   █  █   █ █████   █${RESET}`),
+    B(`  ${PURPLE}█     █  █   █  █   █ █   █   █${RESET}`),
+    B(`  ${PURPLE}█     █   █ ███ ████  █   █   █${RESET}`),
+    B(''),
+    B(`  ${DIM}v${version}${RESET}`),
   ];
-  if (hints.length > 0) {
-    boxLines.push('');
-    boxLines.push(...hints);
-  }
-  boxLines.push('');
 
-  const title = `Friday v${version}`;
-  return '\n' + drawBox(title, boxLines);
+  // ── Capability indicators ─────────────────────────────────────────
+
+  const cap = (label, active) => active
+    ? `${TEAL}\u25cf${RESET} ${label}`
+    : `${DIM}\u25cb ${label}${RESET}`;
+
+  const caps = [
+    cap('Chat', chatOk),
+    cap('Images', imageOk),
+    cap('Voice', voiceOk),
+    cap('Video', videoOk),
+  ].join('    ');
+
+  // ── Assemble ──────────────────────────────────────────────────────
+
+  const lines = [
+    '',
+    ...art,
+    '',
+    `    ${caps}`,
+    '',
+    `    ${DIM}/help${RESET} commands  ${DIM}\u00b7${RESET}  ${DIM}/keys${RESET} API keys  ${DIM}\u00b7${RESET}  ${DIM}/model${RESET} configure`,
+    '',
+  ];
+
+  return lines.join('\n');
 }
