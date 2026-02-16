@@ -567,6 +567,10 @@ export default async function chat(args) {
 
         case 'thinking':
           if (!spinner.active) {
+            if (isStreaming) {
+              process.stdout.write('\n');
+              isStreaming = false;
+            }
             spinner.start('Thinking');
           }
           break;
@@ -580,6 +584,8 @@ export default async function chat(args) {
           }
           if (!isStreaming) {
             isStreaming = true;
+            // Start agent output on a fresh line
+            process.stdout.write('\n');
           }
           {
             const text = msg.text || msg.content || '';
@@ -881,6 +887,8 @@ export default async function chat(args) {
     }
 
     // ── Send user query ─────────────────────────────────────────────────
+    // Echo user input so it's visible in the scroll region
+    console.log(`\n${PURPLE}▸${RESET} ${BOLD}${line}${RESET}`);
     accumulatedResponse = '';
     spinner.start('Thinking');
     writeMessage({ type: 'query', message: line, session_id: sessionId });
