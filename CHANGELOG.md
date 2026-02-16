@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Model catalog API** — `getModelsForCapability()` returns enriched model list with pricing, default status, key availability, and disabled state
 - **`formatModelPrice()` helper** — Human-readable pricing display for all model types (per token, per image, per second, per character, per minute)
 
+#### Fixed
+- **Corrected all model pricing in `models.json`** from official provider pricing pages (OpenAI, Google, ElevenLabs) as of 2026-02-15. Major corrections: Sora 2 $0.02→$0.10/sec, Veo 3.1 $0.035→$0.40/sec, GPT-5.2 $2.50→$1.75 input, gpt-4o-mini-tts changed to per-minute pricing, ElevenLabs switched to credit-based pricing, Google Imagen simplified to flat per-image rates
+
 #### Changed
 - **Provider resolution respects disabled models** — `resolveProvider()` skips providers where all models for a capability are disabled; `resolveModel()` skips disabled models and picks the next enabled one
 - **Preferences file re-read on every access** — Removed cache guard in `_loadPreferences()` so MCP server picks up CLI changes without restart

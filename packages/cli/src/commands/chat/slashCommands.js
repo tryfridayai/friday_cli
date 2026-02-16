@@ -559,9 +559,11 @@ function formatModelPrice(pricing, capability) {
   }
 
   // Image models: per image (use high quality as representative)
-  if (pricing.per_image) {
+  if (pricing.per_image != null) {
+    if (typeof pricing.per_image === 'number') {
+      return `$${pricing.per_image.toFixed(2)}/image`;
+    }
     const sizes = pricing.per_image;
-    // Pick first size entry's high quality, or standard
     const firstSize = Object.values(sizes)[0];
     if (typeof firstSize === 'object') {
       const price = firstSize.high ?? firstSize.enhanced ?? firstSize.standard ?? Object.values(firstSize)[0];
@@ -575,21 +577,23 @@ function formatModelPrice(pricing, capability) {
     return `$${pricing.per_second.toFixed(2)}/sec`;
   }
 
+  // TTS/STT: per minute (gpt-4o-mini-tts, whisper)
+  if (pricing.per_minute != null) {
+    return `$${pricing.per_minute.toFixed(3)}/min`;
+  }
+
   // TTS: per 1M or 1K characters
   if (pricing.per_1m_characters != null) {
     return `$${pricing.per_1m_characters.toFixed(2)}/1M chars`;
-  }
-  if (pricing.per_1k_characters != null) {
-    return `$${pricing.per_1k_characters.toFixed(2)}/1K chars`;
   }
   // Google TTS has multiple tiers — show standard
   if (pricing.standard_per_1m_characters != null) {
     return `$${pricing.standard_per_1m_characters.toFixed(2)}/1M chars`;
   }
 
-  // STT: per minute
-  if (pricing.per_minute != null) {
-    return `$${pricing.per_minute.toFixed(3)}/min`;
+  // ElevenLabs credit-based pricing
+  if (pricing.credits_per_character != null) {
+    return `${pricing.credits_per_character} credit${pricing.credits_per_character === 1 ? '' : 's'}/char`;
   }
 
   return '';
