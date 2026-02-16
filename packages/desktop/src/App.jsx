@@ -30,7 +30,15 @@ export default function App() {
         case 'ready':
           store.setBackendReady(true);
           store.loadSessions();
-          store.loadApiKeys();
+          store.loadApiKeys().then(() => {
+            // Show API keys modal on first startup if no keys configured
+            const keys = useStore.getState().apiKeys;
+            const hasAnyKey = Object.values(keys).some((k) => k.configured);
+            if (!hasAnyKey) {
+              store.setSettingsTab('keys');
+              store.setShowSettings(true);
+            }
+          });
           // Request MCP servers
           window.friday.getMcpServers();
           break;
@@ -62,9 +70,44 @@ export default function App() {
           store.setIsThinking(false);
           break;
 
-        case 'tool_result':
+        case 'tool_result': {
           store.setCurrentTool(null);
+          // Detect media outputs for preview panel
+          const toolName = msg.tool_name || '';
+          const result = typeof msg.tool_result === 'string' ? msg.tool_result : JSON.stringify(msg.tool_result || '');
+          const fileMatch = result.match(/(?:saved|wrote|created|generated|output).*?(\/[^\s"',]+\.(?:png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|mp4|webm|mov))/i)
+            || result.match(/(\/[^\s"',]+\.(?:png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|mp4|webm|mov))/i);
+          if (fileMatch) {
+            const filePath = fileMatch[1];
+            const ext = filePath.split('.').pop().toLowerCase();
+            const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+            const audioExts = ['mp3', 'wav', 'ogg'];
+            const videoExts = ['mp4', 'webm', 'mov'];
+            let mediaType = null;
+            if (imageExts.includes(ext)) mediaType = 'image';
+            else if (audioExts.includes(ext)) mediaType = 'audio';
+            else if (videoExts.includes(ext)) mediaType = 'video';
+            if (mediaType) {
+              store.setPreviewContent({ type: mediaType, url: `friday-media://${filePath}`, alt: filePath });
+              store.setPreviewTab('preview');
+              store.setPreviewOpen(true);
+            }
+          }
+          // Also detect generate_image / text_to_speech tool names
+          if (toolName.includes('generate_image') || toolName.includes('generate_video') || toolName.includes('text_to_speech')) {
+            const pathMatch = result.match(/(\/[^\s"',]+\.\w+)/);
+            if (pathMatch) {
+              const fp = pathMatch[1];
+              const ext = fp.split('.').pop().toLowerCase();
+              const type = ['mp4', 'webm', 'mov'].includes(ext) ? 'video'
+                : ['mp3', 'wav', 'ogg'].includes(ext) ? 'audio' : 'image';
+              store.setPreviewContent({ type, url: `friday-media://${fp}`, alt: fp });
+              store.setPreviewTab('preview');
+              store.setPreviewOpen(true);
+            }
+          }
           break;
+        }
 
         case 'permission_request':
           store.setPermissionRequest(msg);
@@ -78,12 +121,35 @@ export default function App() {
           }
           break;
 
-        case 'complete':
+        case 'complete': {
           store.setIsStreaming(false);
           store.setIsThinking(false);
           store.setCurrentTool(null);
           if (msg.cost) store.setLastCost(msg.cost);
+          // Scan the last assistant message text for media file paths
+          const msgs = useStore.getState().messages;
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant') {
+            const mediaMatch = lastMsg.content.match(/(\/[^\s"',`]+\.(?:png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|mp4|webm|mov))/i);
+            if (mediaMatch) {
+              const fp = mediaMatch[1];
+              const ext = fp.split('.').pop().toLowerCase();
+              const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+              const audioExts = ['mp3', 'wav', 'ogg'];
+              const videoExts = ['mp4', 'webm', 'mov'];
+              let mType = null;
+              if (imageExts.includes(ext)) mType = 'image';
+              else if (audioExts.includes(ext)) mType = 'audio';
+              else if (videoExts.includes(ext)) mType = 'video';
+              if (mType) {
+                store.setPreviewContent({ type: mType, url: `friday-media://${fp}`, alt: fp });
+                store.setPreviewTab('preview');
+                store.setPreviewOpen(true);
+              }
+            }
+          }
           break;
+        }
 
         case 'error':
           store.setIsStreaming(false);

@@ -30,7 +30,13 @@ export default function PermissionCard() {
     if (window.friday) {
       window.friday.sendPermissionResponse(request.permission_id, approved);
     }
-    useStore.getState().setPermissionRequest(null);
+    const store = useStore.getState();
+    store.setPermissionRequest(null);
+    if (approved) {
+      store.setIsStreaming(true);
+      store.setIsThinking(true);
+      store.setThinkingText('');
+    }
   };
 
   const toolLabel = humanizeToolName(request.tool_name);

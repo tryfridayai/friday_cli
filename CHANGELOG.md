@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-02-16
+
+#### Fixed
+- **Desktop: Image/media preview rendering** — Registered custom `friday-media://` Electron protocol to serve local files. The `file://` protocol is blocked by Chromium when the renderer loads from `http://localhost` in dev mode. Images, audio, and video now render correctly in the preview panel.
+- **Desktop: Media preview detection** — Preview panel now detects media file paths (images, audio, video) from assistant text responses, not just tool_result messages. Fixes generated images not appearing in the preview panel.
+- **Desktop: Friday-media shows "Requires setup" when keys already configured** — The Apps pane now cross-references keytar API keys (from the API Keys tab) with MCP servers that depend on them. Friday-media shows "Connected" when OpenAI/Google/ElevenLabs keys are already set, instead of redundantly asking for the same keys.
+- **Desktop: Thinking state after permission approval** — After approving a permission request, the thinking spinner now shows while the agent continues processing, instead of appearing idle.
+- **Desktop: Alternating thinking text** — Thinking indicator now cycles through phrases ("Thinking...", "Getting everything together...", "Processing your request...", etc.) with a spinning loader animation, instead of showing static "Thinking" text.
+- **Desktop: 8-10 keychain prompts on startup** — Replaced 8 individual `keytar.getPassword()` calls (4 in BackendManager + 4 in get-api-key-status) with a single `keytar.findCredentials()` batch read at startup. Subsequent key status queries use the in-memory cache. Keychain prompts now only appear once at startup and once per key save/delete.
+
 ### 2026-02-15
 
 #### Added

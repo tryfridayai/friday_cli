@@ -1,10 +1,20 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, net, protocol } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 
 const { execSync } = require('child_process');
+
+// ── Custom protocol for serving local media files ───────────────────────
+// Must be registered before app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'friday-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+]);
+
+// ── Constants ────────────────────────────────────────────────────────────
+
+const KEYTAR_SERVICE = 'FridayAI-APIKeys';
 
 // ── Paths ───────────────────────────────────────────────────────────────
 
@@ -29,28 +39,36 @@ class BackendManager {
     this.process = null;
     this.buffer = '';
     this.win = null;
-    this.apiKeys = {};
+    this.apiKeys = {}; // Cache: { KEY_NAME: 'value' }
+    this.keysLoaded = false;
+  }
+
+  // Load all API keys from keytar in a single batch call (1 keychain prompt)
+  async loadKeysFromKeytar() {
+    try {
+      const keytar = require('keytar');
+      // findCredentials reads ALL credentials for the service in one OS call
+      const allCreds = await keytar.findCredentials(KEYTAR_SERVICE);
+      this.apiKeys = {};
+      for (const { account, password } of allCreds) {
+        if (password) this.apiKeys[account] = password;
+      }
+      this.keysLoaded = true;
+    } catch (err) {
+      console.error('[BackendManager] keytar load error:', err.message);
+      this.keysLoaded = true; // Mark as loaded even on error to avoid retries
+    }
   }
 
   async start(win) {
     this.win = win;
     if (this.process) this.stop();
 
-    // Load API keys from keytar into env
+    // Load API keys from keytar cache into env
+    if (!this.keysLoaded) await this.loadKeysFromKeytar();
     const env = { ...process.env };
-    try {
-      const keytar = require('keytar');
-      const SERVICE = 'FridayAI-APIKeys';
-      const keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'ELEVENLABS_API_KEY'];
-      for (const key of keys) {
-        const val = await keytar.getPassword(SERVICE, key);
-        if (val) {
-          env[key] = val;
-          this.apiKeys[key] = val;
-        }
-      }
-    } catch (err) {
-      console.error('[BackendManager] keytar load error:', err.message);
+    for (const [key, val] of Object.entries(this.apiKeys)) {
+      env[key] = val;
     }
 
     const workspace = env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace');
@@ -132,7 +150,7 @@ function createWindow() {
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: '#0a0a0f',
+    backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -158,7 +176,15 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Register protocol handler to serve local files (file:// is blocked from http:// origins)
+  protocol.handle('friday-media', (request) => {
+    const fileUrl = request.url.replace('friday-media://', 'file://');
+    return net.fetch(fileUrl);
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   backend.stop();
@@ -240,7 +266,6 @@ ipcMain.on('scheduled-agent', (_event, data) => {
 
 // ── Keytar (API Keys) IPC ───────────────────────────────────────────────
 
-const KEYTAR_SERVICE = 'FridayAI-APIKeys';
 const API_KEY_DEFS = {
   ANTHROPIC_API_KEY: { label: 'Anthropic', unlocks: 'Chat (Claude)' },
   OPENAI_API_KEY: { label: 'OpenAI', unlocks: 'Chat, Images, Voice, Video' },
@@ -249,22 +274,15 @@ const API_KEY_DEFS = {
 };
 
 ipcMain.handle('get-api-key-status', async () => {
+  // Use cached keys from BackendManager — no additional keychain prompts
   const result = {};
-  try {
-    const keytar = require('keytar');
-    for (const [key, def] of Object.entries(API_KEY_DEFS)) {
-      const val = await keytar.getPassword(KEYTAR_SERVICE, key);
-      result[key] = {
-        ...def,
-        configured: !!val,
-        preview: val ? '****' + val.slice(-4) : null,
-      };
-    }
-  } catch (err) {
-    console.error('[Keytar] Error getting status:', err.message);
-    for (const [key, def] of Object.entries(API_KEY_DEFS)) {
-      result[key] = { ...def, configured: false, preview: null };
-    }
+  for (const [key, def] of Object.entries(API_KEY_DEFS)) {
+    const val = backend.apiKeys[key];
+    result[key] = {
+      ...def,
+      configured: !!val,
+      preview: val ? '****' + val.slice(-4) : null,
+    };
   }
   return result;
 });
@@ -273,6 +291,8 @@ ipcMain.handle('set-api-key', async (_event, { keyName, value }) => {
   try {
     const keytar = require('keytar');
     await keytar.setPassword(KEYTAR_SERVICE, keyName, value);
+    // Update cache so get-api-key-status stays in sync without hitting keytar
+    backend.apiKeys[keyName] = value;
     // Restart backend so it picks up the new key
     await backend.restart();
     return { success: true };
@@ -286,6 +306,8 @@ ipcMain.handle('delete-api-key', async (_event, { keyName }) => {
   try {
     const keytar = require('keytar');
     await keytar.deletePassword(KEYTAR_SERVICE, keyName);
+    // Update cache
+    delete backend.apiKeys[keyName];
     await backend.restart();
     return { success: true };
   } catch (err) {

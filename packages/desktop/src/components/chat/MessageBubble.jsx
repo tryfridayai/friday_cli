@@ -40,9 +40,9 @@ export default function MessageBubble({ message }) {
       className="flex items-start gap-3 px-4 py-1.5"
     >
       <div className="flex-shrink-0 w-7 h-7 rounded-full bg-accent-muted flex items-center justify-center mt-0.5">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--accent)">
-          <rect x="4" y="2" width="5" height="20" rx="2" />
-          <rect x="15" y="2" width="5" height="20" rx="2" />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <rect x="6.5" y="3" width="4" height="14" rx="2" fill="#666666" />
+          <rect x="13.5" y="7" width="4" height="14" rx="2" fill="var(--accent)" />
         </svg>
       </div>
       <div className="min-w-0 flex-1 max-w-[85%]">

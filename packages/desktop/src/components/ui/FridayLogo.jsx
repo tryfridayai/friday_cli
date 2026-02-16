@@ -1,44 +1,37 @@
-import { motion } from 'framer-motion';
+import useStore from '../../store/useStore';
 
-export default function FridayLogo({ size = 32, animate = true }) {
-  const barWidth = size * 0.2;
-  const gap = size * 0.15;
-  const totalWidth = barWidth * 2 + gap;
-  const offset = (size - totalWidth) / 2;
+export default function FridayLogo({ size = 24 }) {
+  const theme = useStore((s) => s.theme);
+  const isLight = theme === 'light';
+
+  // Match the official SVG: two offset bars with animated opacity
+  // Dark bg: left=#666, right=#fff | Light bg: left=#666, right=#0a0a0a
+  const rightFill = isLight ? '#0a0a0a' : '#ffffff';
 
   return (
-    <motion.svg
+    <svg
       width={size}
       height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      initial={animate ? { opacity: 0, scale: 0.8 } : false}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
     >
-      <motion.rect
-        x={offset}
-        y={size * 0.15}
-        width={barWidth}
-        height={size * 0.7}
-        rx={barWidth * 0.3}
-        fill="var(--accent)"
-        initial={animate ? { scaleY: 0 } : false}
-        animate={{ scaleY: 1 }}
-        transition={{ delay: 0.1, duration: 0.4, ease: 'easeOut' }}
-        style={{ transformOrigin: `${offset + barWidth / 2}px ${size * 0.5}px` }}
-      />
-      <motion.rect
-        x={offset + barWidth + gap}
-        y={size * 0.15}
-        width={barWidth}
-        height={size * 0.7}
-        rx={barWidth * 0.3}
-        fill="var(--accent)"
-        initial={animate ? { scaleY: 0 } : false}
-        animate={{ scaleY: 1 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: 'easeOut' }}
-        style={{ transformOrigin: `${offset + barWidth + gap + barWidth / 2}px ${size * 0.5}px` }}
-      />
-    </motion.svg>
+      <rect x="6.5" y="3" width="4" height="14" rx="2" fill="#666666">
+        <animate
+          attributeName="opacity"
+          values="0.6;1;0.6"
+          dur="1.6s"
+          repeatCount="indefinite"
+        />
+      </rect>
+      <rect x="13.5" y="7" width="4" height="14" rx="2" fill={rightFill}>
+        <animate
+          attributeName="opacity"
+          values="1;0.6;1"
+          dur="1.6s"
+          repeatCount="indefinite"
+        />
+      </rect>
+    </svg>
   );
 }

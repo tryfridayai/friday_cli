@@ -1,17 +1,42 @@
 import { useEffect, useState } from 'react';
 import useStore from '../../store/useStore';
 
-function AppCard({ server }) {
+// Map of MCP server IDs to the keytar API keys they depend on.
+// If ANY of these keys are configured in the API Keys tab, the server
+// is considered "available via env" and shouldn't prompt for credentials.
+const ENV_KEY_MAP = {
+  'friday-media': ['OPENAI_API_KEY', 'GOOGLE_API_KEY', 'ELEVENLABS_API_KEY'],
+};
+
+function getServerStatus(server, apiKeys) {
+  // If this server maps to env keys and any of them are configured,
+  // treat it as connected (keys are injected via env on backend start)
+  const envKeys = ENV_KEY_MAP[server.id];
+  if (envKeys && apiKeys) {
+    const hasEnvKey = envKeys.some((k) => apiKeys[k]?.configured);
+    if (hasEnvKey) return { label: 'Connected', color: 'text-success', showConnect: false, showDisconnect: false };
+  }
+
+  if (server.configured) {
+    return { label: 'Connected', color: 'text-success', showConnect: false, showDisconnect: true };
+  }
+  if (server.requiresCredentials) {
+    return { label: 'Requires setup', color: 'text-text-muted', showConnect: true, showDisconnect: false };
+  }
+  return { label: 'Available', color: 'text-success', showConnect: false, showDisconnect: false };
+}
+
+function AppCard({ server, apiKeys }) {
   const [showCredForm, setShowCredForm] = useState(false);
   const [fields, setFields] = useState({});
   const [saving, setSaving] = useState(false);
 
   const credAuth = (server.auth || []).find((a) => a.type === 'credentials');
   const oauthAuth = (server.auth || []).find((a) => a.type === 'oauth' || a.type === 'remote-oauth');
+  const status = getServerStatus(server, apiKeys);
 
   const handleConnect = async () => {
     if (oauthAuth) {
-      // Start OAuth flow
       if (window.friday) {
         window.friday.startMcpOAuth(oauthAuth.provider || oauthAuth.id, server.id, oauthAuth.scopes);
       }
@@ -53,35 +78,28 @@ function AppCard({ server }) {
           </div>
           <div>
             <h4 className="text-sm font-medium">{server.name}</h4>
-            <span
-              className={`text-xs ${
-                server.configured
-                  ? 'text-success'
-                  : server.requiresCredentials
-                  ? 'text-text-muted'
-                  : 'text-success'
-              }`}
-            >
-              {server.configured ? 'Connected' : server.requiresCredentials ? 'Requires setup' : 'Available'}
+            <span className={`text-xs ${status.color}`}>
+              {status.label}
             </span>
           </div>
         </div>
         <div>
-          {server.configured ? (
+          {status.showDisconnect && (
             <button
               onClick={handleDisconnect}
               className="px-3 py-1 rounded-lg text-xs text-danger bg-danger/10 hover:bg-danger/20 transition-colors"
             >
               Disconnect
             </button>
-          ) : server.requiresCredentials ? (
+          )}
+          {status.showConnect && (
             <button
               onClick={handleConnect}
               className="px-3 py-1 rounded-lg text-xs text-white bg-accent hover:bg-accent-hover transition-colors"
             >
               Connect
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 
@@ -125,6 +143,7 @@ function AppCard({ server }) {
 
 export default function AppsPane() {
   const mcpServers = useStore((s) => s.mcpServers);
+  const apiKeys = useStore((s) => s.apiKeys);
 
   useEffect(() => {
     if (window.friday) window.friday.getMcpServers();
@@ -143,7 +162,7 @@ export default function AppsPane() {
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {mcpServers.map((server) => (
-            <AppCard key={server.id} server={server} />
+            <AppCard key={server.id} server={server} apiKeys={apiKeys} />
           ))}
         </div>
       )}

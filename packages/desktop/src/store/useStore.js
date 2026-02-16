@@ -9,7 +9,7 @@ const useStore = create((set, get) => ({
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
 
   // ── Theme ─────────────────────────────────────────────────────────────
-  theme: 'dark',
+  theme: 'light',
   setTheme: (theme) => set({ theme }),
 
   // ── Backend status ────────────────────────────────────────────────────
@@ -79,11 +79,11 @@ const useStore = create((set, get) => ({
   setScheduledAgents: (agents) => set({ scheduledAgents: agents }),
 
   // ── Preview panel ─────────────────────────────────────────────────────
-  previewOpen: false,
+  previewOpen: true,
   setPreviewOpen: (v) => set({ previewOpen: v }),
   previewContent: null, // { type: 'image'|'audio'|'video', url, alt }
   setPreviewContent: (content) => set({ previewContent: content }),
-  previewTab: 'preview', // 'preview' | 'agents'
+  previewTab: 'agents', // 'preview' | 'agents'
   setPreviewTab: (tab) => set({ previewTab: tab }),
 
   // ── Completion cost ───────────────────────────────────────────────────
