@@ -16,26 +16,17 @@ import path from 'path';
 let OpenAI = null;
 let clientInstance = null;
 
-function getClient() {
-  if (clientInstance) return clientInstance;
-  if (!OpenAI) {
-    try {
-      OpenAI = (await import('openai')).default;
-    } catch {
-      throw new Error('openai package not installed. Run: npm install openai');
-    }
-  }
-  clientInstance = new OpenAI();
-  return clientInstance;
-}
-
 // Use dynamic import for lazy loading
 async function ensureClient() {
   if (clientInstance) return clientInstance;
-  const mod = await import('openai');
-  OpenAI = mod.default || mod.OpenAI;
-  clientInstance = new OpenAI();
-  return clientInstance;
+  try {
+    const mod = await import('openai');
+    OpenAI = mod.default || mod.OpenAI;
+    clientInstance = new OpenAI();
+    return clientInstance;
+  } catch {
+    throw new Error('openai package not installed. Run: npm install openai');
+  }
 }
 
 // ─── Default Models ──────────────────────────────────────────────
@@ -155,7 +146,7 @@ export async function generateImage(opts) {
  * @param {string} opts.prompt
  * @param {string} [opts.model] - 'sora-2' | 'sora-2-pro'
  * @param {string} [opts.size] - '1280x720' | '1920x1080'
- * @param {number} [opts.seconds] - Duration (5-25)
+ * @param {number} [opts.seconds] - Duration: 4, 8, or 12 (API constraint)
  * @param {string} opts.outputDir
  * @returns {Promise<{ path: string, model: string, metadata: object }>}
  */
@@ -163,7 +154,13 @@ export async function generateVideo(opts) {
   const client = await ensureClient();
   const model = opts.model || DEFAULTS.videoGen;
   const size = opts.size || '1280x720';
-  const seconds = String(Math.min(Math.max(opts.seconds || 8, 5), 25));
+
+  // API only accepts 4, 8, or 12 seconds
+  const VALID_SECONDS = [4, 8, 12];
+  const rawSeconds = opts.seconds || 8;
+  const seconds = String(VALID_SECONDS.reduce((prev, curr) =>
+    Math.abs(curr - rawSeconds) < Math.abs(prev - rawSeconds) ? curr : prev
+  ));
 
   // Start the video generation job
   const job = await client.videos.create({
@@ -186,17 +183,14 @@ export async function generateVideo(opts) {
     const status = await client.videos.retrieve(videoId);
 
     if (status.status === 'completed') {
-      // Download the video
       const filename = `vid_${Date.now()}.mp4`;
       const filePath = path.join(opts.outputDir, 'videos', filename);
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
 
-      // The completed video has a download URL
-      if (status.url) {
-        const res = await fetch(status.url);
-        const buf = Buffer.from(await res.arrayBuffer());
-        fs.writeFileSync(filePath, buf);
-      }
+      // Download via SDK's downloadContent method
+      const response = await client.videos.downloadContent(videoId);
+      const buf = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(filePath, buf);
 
       return {
         path: filePath,

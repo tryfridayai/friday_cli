@@ -8,7 +8,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import readline from 'readline';
 import {
   PURPLE, BLUE, TEAL, ORANGE, PINK, DIM, RESET, BOLD,
   RED, GREEN, CYAN, YELLOW,
@@ -31,7 +30,7 @@ const commands = [
   { name: 'help',     aliases: ['h'],   description: 'Show all commands' },
   { name: 'status',   aliases: ['s'],   description: 'Session, costs, capabilities' },
   { name: 'plugins',  aliases: ['p'],   description: 'Install/uninstall/list plugins' },
-  { name: 'models',   aliases: ['m'],   description: 'List available models' },
+  { name: 'model',    aliases: ['m', 'models'], description: 'View and configure models' },
   { name: 'keys',     aliases: ['k'],   description: 'Add/update API keys' },
   { name: 'config',   aliases: [],      description: 'Permission profile, workspace' },
   { name: 'schedule', aliases: [],      description: 'Manage scheduled agents' },
@@ -131,21 +130,102 @@ function readEnvKeys() {
   return keys;
 }
 
+/**
+ * Ask a question and wait for text input.
+ * Works with both readline and the InputLine rlCompat adapter.
+ */
 function askQuestion(rl, question) {
   return new Promise((resolve) => {
-    rl.question(question, (answer) => resolve(answer.trim()));
+    // If rl has a native .question() (readline interface), use it
+    if (typeof rl.question === 'function') {
+      rl.question(question, (answer) => resolve(answer.trim()));
+      return;
+    }
+
+    // Otherwise use raw stdin (InputLine rlCompat adapter)
+    rl.pause();
+
+    let input = '';
+    const wasRaw = process.stdin.isRaw;
+
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+
+    const cleanup = () => {
+      process.stdin.removeListener('data', onData);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(wasRaw || false);
+      }
+      process.stdout.write('\n');
+      rl.resume();
+    };
+
+    const onData = (data) => {
+      const str = data.toString();
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        const code = ch.charCodeAt(0);
+
+        if (ch === '\r' || ch === '\n') {
+          cleanup();
+          resolve(input.trim());
+          return;
+        }
+        if (code === 3) { // Ctrl+C
+          cleanup();
+          resolve('');
+          return;
+        }
+        if (code === 127 || code === 8) { // Backspace
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+          continue;
+        }
+        // Skip escape sequences
+        if (code === 0x1b) {
+          i++;
+          if (i < str.length && str[i] === '[') {
+            i++;
+            while (i < str.length && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x3f) i++;
+            // skip final byte
+          }
+          continue;
+        }
+        // Skip control chars
+        if (code < 0x20) continue;
+
+        input += ch;
+        process.stdout.write(ch);
+      }
+    };
+
+    process.stdin.on('data', onData);
+
+    setImmediate(() => {
+      process.stdout.write(question);
+    });
   });
 }
 
 /**
  * Read input with secret masking (hides characters with *).
  * SECURITY: Input is NEVER echoed - only asterisks are shown.
+ * Works with both readline and the InputLine rlCompat adapter.
  */
 function askSecret(rl, prompt) {
   return new Promise((resolve) => {
-    // Fully detach readline so it doesn't echo input
+    // Pause InputLine / readline so it doesn't capture keystrokes
     rl.pause();
-    rl.terminal = false;
+
+    // Fully detach readline echo if it has terminal property
+    const hadTerminal = rl.terminal;
+    if ('terminal' in rl) {
+      rl.terminal = false;
+    }
 
     // Clear any buffered input from readline
     if (rl.line) {
@@ -169,7 +249,10 @@ function askSecret(rl, prompt) {
         process.stdin.setRawMode(wasRaw || false);
       }
       process.stdout.write('\n');
-      rl.terminal = true;
+
+      if ('terminal' in rl) {
+        rl.terminal = hadTerminal;
+      }
 
       // Clear readline buffer before resuming to prevent leakage
       if (rl.line) {
@@ -180,8 +263,12 @@ function askSecret(rl, prompt) {
 
     const onData = (data) => {
       const str = data.toString();
-      // Process each character individually (handles paste as a single chunk)
-      for (const char of str) {
+      // Use index-based iteration to properly skip multi-byte escape sequences
+      let i = 0;
+      while (i < str.length) {
+        const char = str[i];
+        const code = char.charCodeAt(0);
+
         if (char === '\r' || char === '\n') {
           cleanup();
           resolve(input);
@@ -197,10 +284,40 @@ function askSecret(rl, prompt) {
             input = input.slice(0, -1);
             process.stdout.write('\b \b');
           }
+          i++;
           continue;
         }
+
+        // Skip escape sequences (arrow keys, etc. send \x1b[A, \x1b[B, etc.)
+        if (code === 0x1b) {
+          i++;
+          // CSI sequences: ESC [ <params> <final byte>
+          if (i < str.length && str[i] === '[') {
+            i++;
+            // Skip parameter bytes (0x30-0x3f) and intermediate bytes (0x20-0x2f)
+            while (i < str.length && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x3f) {
+              i++;
+            }
+            // Skip final byte (0x40-0x7e)
+            if (i < str.length) i++;
+          }
+          // OSC, SS2, SS3 and other ESC sequences: skip next char
+          else if (i < str.length) {
+            i++;
+          }
+          continue;
+        }
+
+        // Skip any other control characters (< 0x20)
+        if (code < 0x20) {
+          i++;
+          continue;
+        }
+
+        // Printable character — accept it
         input += char;
         process.stdout.write('*');
+        i++;
       }
     };
 
@@ -241,7 +358,7 @@ export async function routeSlashCommand(input, ctx) {
     case 'help':    cmdHelp(ctx); break;
     case 'status':  await cmdStatus(ctx); break;
     case 'plugins': await cmdPlugins(ctx, argString); break;
-    case 'models':  cmdModels(ctx); break;
+    case 'model':   await cmdModel(ctx); break;
     case 'keys':    await cmdKeys(ctx); break;
     case 'config':  await cmdConfig(ctx); break;
     case 'schedule': await cmdSchedule(ctx); break;
@@ -470,7 +587,11 @@ async function pluginInstallFlow(pm, ctx) {
     const name = pm.getPluginManifest(pluginId).name;
     console.log('');
     console.log(success(`\u2713 ${name} installed successfully!`));
-    console.log(hint('Start a /new session to activate the plugin.'));
+    console.log('');
+    console.log(hint('To activate the plugin:'));
+    console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+    console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+    console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
     console.log('');
   } catch (err) {
     console.log(errorMsg(`Install failed: ${err.message}`));
@@ -501,78 +622,170 @@ async function pluginUninstallFlow(pm, ctx) {
     pm.uninstall(choice.value);
     console.log('');
     console.log(success(`\u2713 ${choice.label} uninstalled.`));
-    console.log(hint('Start a /new session to apply changes.'));
+    console.log('');
+    console.log(hint('To apply changes:'));
+    console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+    console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+    console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
     console.log('');
   } catch (err) {
     console.log(errorMsg(`Uninstall failed: ${err.message}`));
   }
 }
 
-function cmdModels() {
-  console.log('');
-  console.log(sectionHeader('Available Models'));
-  console.log('');
+function formatModelPrice(pricing, capability) {
+  if (!pricing) return '';
 
-  let modelsData;
-  try {
-    const modelsPath = path.join(runtimeDir, 'src', 'providers', 'models.json');
-    modelsData = JSON.parse(fs.readFileSync(modelsPath, 'utf8'));
-  } catch {
-    console.log(errorMsg('Could not load models.json'));
-    return;
+  // Video models: per second — show standard and high-res/4K tiers
+  if (pricing.per_second != null) {
+    let result = `$${pricing.per_second.toFixed(2)}/sec`;
+    if (pricing.per_second_high_res) {
+      result += ` ($${pricing.per_second_high_res.toFixed(2)} high-res)`;
+    }
+    if (pricing.per_second_4k) {
+      result += ` ($${pricing.per_second_4k.toFixed(2)} 4K)`;
+    }
+    return result;
   }
 
-  const envKeys = readEnvKeys();
+  // Chat models: input/output per 1M tokens — show cached price if available
+  if (pricing.input_per_1m_tokens != null) {
+    let result = `$${pricing.input_per_1m_tokens.toFixed(2)} in / $${pricing.output_per_1m_tokens.toFixed(2)} out per 1M`;
+    if (pricing.notes) result += ` — ${pricing.notes}`;
+    return result;
+  }
 
-  // Group models by capability
-  const capModels = {
-    'Chat': [],
-    'Image Gen': [],
-    'TTS (Voice)': [],
-    'Video Gen': [],
-    'STT (Transcription)': [],
-  };
-
-  const capMap = {
-    'chat': 'Chat',
-    'image-gen': 'Image Gen',
-    'tts': 'TTS (Voice)',
-    'video-gen': 'Video Gen',
-    'stt': 'STT (Transcription)',
-  };
-
-  for (const [providerId, provider] of Object.entries(modelsData.providers)) {
-    const keyAvailable = !!envKeys[provider.envKey];
-    for (const [modelId, model] of Object.entries(provider.models)) {
-      for (const cap of model.capabilities) {
-        const groupName = capMap[cap] || cap;
-        if (!capModels[groupName]) capModels[groupName] = [];
-        const isDefault = model.default_for?.includes(cap);
-        capModels[groupName].push({
-          name: model.name,
-          provider: providerId,
-          description: model.description,
-          isDefault,
-          available: keyAvailable,
-        });
+  // Image models: per image — show quality range for tiered pricing
+  if (pricing.per_image != null) {
+    if (typeof pricing.per_image === 'number') {
+      return `$${pricing.per_image.toFixed(3)}/image`;
+    }
+    const sizes = pricing.per_image;
+    // Collect all prices across sizes and qualities
+    const allPrices = [];
+    for (const sizeVal of Object.values(sizes)) {
+      if (typeof sizeVal === 'number') {
+        allPrices.push(sizeVal);
+      } else if (typeof sizeVal === 'object') {
+        for (const qualityPrice of Object.values(sizeVal)) {
+          if (typeof qualityPrice === 'number') allPrices.push(qualityPrice);
+        }
       }
     }
-  }
-
-  for (const [capName, models] of Object.entries(capModels)) {
-    if (models.length === 0) continue;
-    console.log(`  ${PURPLE}${BOLD}${capName}${RESET}`);
-    for (const m of models) {
-      const defaultTag = m.isDefault ? ` ${TEAL}(default)${RESET}` : '';
-      const availTag = m.available ? '' : ` ${DIM}(no key)${RESET}`;
-      console.log(`    ${BOLD}${m.name}${RESET}${defaultTag}${availTag}  ${DIM}${m.provider}${RESET}`);
-      console.log(`    ${DIM}${m.description}${RESET}`);
+    if (allPrices.length > 0) {
+      const min = Math.min(...allPrices);
+      const max = Math.max(...allPrices);
+      if (min === max) {
+        return `$${min.toFixed(3)}/image`;
+      }
+      return `$${min.toFixed(3)}-$${max.toFixed(3)}/image`;
     }
-    console.log('');
   }
 
-  console.log(`  ${DIM}Model selection is automatic based on task. Use /keys to add provider keys.${RESET}`);
-  console.log('');
+  // TTS/STT: per minute (gpt-4o-mini-tts, whisper)
+  if (pricing.per_minute != null) {
+    return `$${pricing.per_minute.toFixed(3)}/min`;
+  }
+
+  // TTS: per 1M or 1K characters
+  if (pricing.per_1m_characters != null) {
+    return `$${pricing.per_1m_characters.toFixed(2)}/1M chars`;
+  }
+  // Google TTS has multiple tiers — show standard and premium
+  if (pricing.standard_per_1m_characters != null) {
+    let result = `$${pricing.standard_per_1m_characters.toFixed(2)}/1M chars`;
+    if (pricing.wavenet_per_1m_characters) {
+      result += ` ($${pricing.wavenet_per_1m_characters.toFixed(2)} WaveNet)`;
+    }
+    if (pricing.neural2_per_1m_characters) {
+      result += ` ($${pricing.neural2_per_1m_characters.toFixed(2)} Neural2)`;
+    }
+    return result;
+  }
+
+  // ElevenLabs credit-based pricing
+  if (pricing.credits_per_character != null) {
+    return `${pricing.credits_per_character} credit${pricing.credits_per_character === 1 ? '' : 's'}/char`;
+  }
+
+  return '';
+}
+
+async function cmdModel(ctx) {
+  // Lazy-load ProviderRegistry (same pattern as cmdPlugins imports PluginManager)
+  const { default: ProviderRegistry } = await import(path.join(runtimeDir, 'providers', 'ProviderRegistry.js'));
+  const registry = new ProviderRegistry();
+
+  const categories = [
+    { label: 'Chat', capability: 'chat' },
+    { label: 'Image', capability: 'image-gen' },
+    { label: 'Video', capability: 'video-gen' },
+    { label: 'Voice', capability: 'tts' },
+    { label: 'STT', capability: 'stt' },
+  ];
+
+  // Category selection loop
+  while (true) {
+    console.log('');
+    console.log(sectionHeader('Models'));
+    console.log('');
+
+    // Build category options with enabled counts
+    const catOptions = categories.map((cat) => {
+      const models = registry.getModelsForCapability(cat.capability);
+      const enabled = models.filter((m) => !m.disabled).length;
+      return {
+        label: `${cat.label}  ${DIM}(${enabled}/${models.length} enabled)${RESET}`,
+        value: cat.capability,
+      };
+    });
+    catOptions.push({ label: 'Done', value: 'done' });
+
+    const catChoice = await ctx.selectOption(catOptions, { rl: ctx.rl });
+    if (catChoice.value === 'done') {
+      console.log('');
+      console.log(success('Changes saved.'));
+      console.log('');
+      break;
+    }
+
+    const capability = catChoice.value;
+
+    // Model list loop for selected category
+    while (true) {
+      const models = registry.getModelsForCapability(capability);
+      console.log('');
+
+      // Display current model list
+      for (const m of models) {
+        const dot = m.disabled ? `${RED}\u25cb${RESET}` : `${TEAL}\u25cf${RESET}`;
+        const defaultTag = m.isDefault ? '*' : '';
+        const statusTag = m.disabled ? `${RED}disabled${RESET}` : `${TEAL}enabled${RESET}`;
+        const keyTag = m.hasKey ? '' : `  ${DIM}(no key)${RESET}`;
+        const price = formatModelPrice(m.pricing, capability);
+        const priceTag = price ? `  ${DIM}| ${price}${RESET}` : '';
+        console.log(`  ${dot} ${BOLD}${m.name}${defaultTag}${RESET}  ${DIM}${m.providerId}${RESET}  ${statusTag}${keyTag}${priceTag}`);
+      }
+      console.log('');
+
+      // Build toggle options
+      const toggleOptions = models.map((m) => ({
+        label: `${m.disabled ? 'Enable' : 'Disable'} ${m.name}`,
+        value: m.modelId,
+      }));
+      toggleOptions.push({ label: 'Back', value: 'back' });
+
+      const toggleChoice = await ctx.selectOption(toggleOptions, { rl: ctx.rl });
+      if (toggleChoice.value === 'back') break;
+
+      const modelId = toggleChoice.value;
+      const nowDisabled = registry.toggleModel(modelId);
+      const modelName = models.find((m) => m.modelId === modelId)?.name || modelId;
+      console.log(nowDisabled
+        ? `  ${RED}${modelName} disabled${RESET}`
+        : `  ${TEAL}${modelName} enabled${RESET}`);
+    }
+  }
 }
 
 async function cmdKeys(ctx) {
@@ -660,7 +873,11 @@ async function cmdKeys(ctx) {
       await setApiKey(selected.key, newValue);
       console.log('');
       console.log(success(`\u2713 ${selected.label} key saved securely to system keychain`));
-      console.log(hint('Start a /new session for changes to take effect.'));
+      console.log('');
+      console.log(hint('To apply changes:'));
+      console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+      console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+      console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       console.log('');
     } else {
       // Fallback to .env file (less secure, but functional)
@@ -683,7 +900,11 @@ async function cmdKeys(ctx) {
       console.log('');
       console.log(success(`\u2713 ${selected.label} key saved to ~/.friday/.env`));
       console.log(`  ${ORANGE}Note: For better security, install keytar for secure keychain storage${RESET}`);
-      console.log(hint('Start a /new session for changes to take effect.'));
+      console.log('');
+      console.log(hint('To apply changes:'));
+      console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+      console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+      console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       console.log('');
     }
   } catch (err) {
@@ -732,7 +953,11 @@ async function cmdConfig(ctx) {
         fs.writeFileSync(PERMISSIONS_FILE, JSON.stringify(data, null, 2), 'utf8');
         console.log('');
         console.log(success(`\u2713 Profile changed to ${profileChoice.value}`));
-        console.log(hint('Start a /new session for changes to take effect.'));
+        console.log('');
+        console.log(hint('To apply changes:'));
+        console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+        console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+        console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       } catch (err) {
         console.log(errorMsg(`Failed to save profile: ${err.message}`));
       }
@@ -753,7 +978,11 @@ async function cmdConfig(ctx) {
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2), 'utf8');
         console.log('');
         console.log(success(`\u2713 Workspace set to ${resolved}`));
-        console.log(hint('Start a /new session for changes to take effect.'));
+        console.log('');
+        console.log(hint('To apply changes:'));
+        console.log(`  ${DIM}1. Press Ctrl+C to exit${RESET}`);
+        console.log(`  ${DIM}2. Run \`friday chat\` to restart${RESET}`);
+        console.log(`  ${DIM}Your chat history will auto-resume.${RESET}`);
       } catch (err) {
         console.log(errorMsg(`Failed to set workspace: ${err.message}`));
       }

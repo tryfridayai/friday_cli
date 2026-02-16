@@ -66,6 +66,26 @@ runtime_friday/
 └── CLAUDE.md                   # This file
 ```
 
+## Git Workflow
+
+**IMPORTANT: Never push directly to the `main` branch.**
+
+1. Always create a feature branch for changes
+2. Use descriptive branch names (e.g., `fix/api-key-security`, `feat/new-command`)
+3. Push to the feature branch and create a PR for review
+4. Merge to `main` only via pull request
+
+```bash
+# Create a new branch
+git checkout -b fix/description-here
+
+# Push to feature branch
+git push origin fix/description-here
+
+# Create PR via GitHub CLI
+gh pr create --title "Fix: description" --body "..."
+```
+
 ## Security Guidelines
 
 1. **Never expose API keys to the agent** - All environment variables passed to the SDK or spawned processes must be filtered using `filterSensitiveEnv()`

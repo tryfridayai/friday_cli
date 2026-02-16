@@ -1,5 +1,10 @@
 {
-  "version": "2026-02-14",
+  "version": "2026-02-15",
+  "pricing_as_of": {
+    "openai": "2026-02-15 (source: developers.openai.com/api/docs/pricing)",
+    "google": "2026-02-15 (source: ai.google.dev/gemini-api/docs/pricing)",
+    "elevenlabs": "2026-02-15 (source: help.elevenlabs.io, elevenlabs.io/pricing)"
+  },
   "providers": {
     "openai": {
       "envKey": "OPENAI_API_KEY",
@@ -12,10 +17,10 @@
           "default_for": ["image-gen"],
           "pricing": {
             "per_image": {
-              "1024x1024": { "low": 0.011, "medium": 0.042, "high": 0.167 },
-              "1536x1024": { "low": 0.016, "medium": 0.063, "high": 0.25 },
-              "1024x1536": { "low": 0.016, "medium": 0.063, "high": 0.25 },
-              "auto": { "low": 0.011, "medium": 0.042, "high": 0.167 }
+              "1024x1024": { "low": 0.009, "medium": 0.034, "high": 0.133 },
+              "1536x1024": { "low": 0.013, "medium": 0.05, "high": 0.20 },
+              "1024x1536": { "low": 0.013, "medium": 0.05, "high": 0.20 },
+              "auto": { "low": 0.009, "medium": 0.034, "high": 0.133 }
             },
             "unit": "USD"
           },
@@ -42,10 +47,10 @@
           "default_for": [],
           "pricing": {
             "per_image": {
-              "1024x1024": { "low": 0.004, "medium": 0.015, "high": 0.06 },
-              "1536x1024": { "low": 0.006, "medium": 0.023, "high": 0.09 },
-              "1024x1536": { "low": 0.006, "medium": 0.023, "high": 0.09 },
-              "auto": { "low": 0.004, "medium": 0.015, "high": 0.06 }
+              "1024x1024": { "low": 0.005, "medium": 0.011, "high": 0.036 },
+              "1536x1024": { "low": 0.008, "medium": 0.016, "high": 0.054 },
+              "1024x1536": { "low": 0.008, "medium": 0.016, "high": 0.054 },
+              "auto": { "low": 0.005, "medium": 0.011, "high": 0.036 }
             },
             "unit": "USD"
           },
@@ -56,7 +61,7 @@
           "capabilities": ["video-gen"],
           "default_for": ["video-gen"],
           "pricing": {
-            "per_second": 0.02,
+            "per_second": 0.10,
             "unit": "USD",
             "notes": "Pricing varies by resolution and duration"
           },
@@ -67,9 +72,10 @@
           "capabilities": ["video-gen"],
           "default_for": [],
           "pricing": {
-            "per_second": 0.06,
+            "per_second": 0.30,
+            "per_second_high_res": 0.50,
             "unit": "USD",
-            "notes": "Higher fidelity output, longer processing time"
+            "notes": "$0.30/sec at 720p/1280p, $0.50/sec at 1024p/1792p"
           },
           "description": "Higher fidelity video generation for professional-quality output"
         },
@@ -78,7 +84,7 @@
           "capabilities": ["tts"],
           "default_for": ["tts"],
           "pricing": {
-            "per_1m_characters": 12.0,
+            "per_minute": 0.015,
             "unit": "USD"
           },
           "metadata": {
@@ -142,9 +148,9 @@
           "capabilities": ["chat"],
           "default_for": ["chat"],
           "pricing": {
-            "input_per_1m_tokens": 2.50,
-            "cached_input_per_1m_tokens": 1.25,
-            "output_per_1m_tokens": 10.0,
+            "input_per_1m_tokens": 1.75,
+            "cached_input_per_1m_tokens": 0.175,
+            "output_per_1m_tokens": 14.0,
             "unit": "USD"
           },
           "metadata": {
@@ -161,9 +167,9 @@
           "capabilities": ["chat"],
           "default_for": [],
           "pricing": {
-            "input_per_1m_tokens": 2.50,
-            "cached_input_per_1m_tokens": 1.25,
-            "output_per_1m_tokens": 10.0,
+            "input_per_1m_tokens": 1.75,
+            "cached_input_per_1m_tokens": 0.175,
+            "output_per_1m_tokens": 14.0,
             "unit": "USD"
           },
           "metadata": {
@@ -208,10 +214,7 @@
           "capabilities": ["image-gen"],
           "default_for": [],
           "pricing": {
-            "per_image": {
-              "standard": 0.06,
-              "enhanced": 0.12
-            },
+            "per_image": 0.06,
             "unit": "USD"
           },
           "description": "Highest fidelity image generation with photorealistic detail"
@@ -221,10 +224,7 @@
           "capabilities": ["image-gen"],
           "default_for": ["image-gen"],
           "pricing": {
-            "per_image": {
-              "standard": 0.04,
-              "enhanced": 0.08
-            },
+            "per_image": 0.04,
             "unit": "USD"
           },
           "description": "Balanced image generation combining quality and speed"
@@ -234,10 +234,7 @@
           "capabilities": ["image-gen"],
           "default_for": [],
           "pricing": {
-            "per_image": {
-              "standard": 0.02,
-              "enhanced": 0.04
-            },
+            "per_image": 0.02,
             "unit": "USD"
           },
           "description": "Quick image generation optimized for iteration speed"
@@ -247,9 +244,10 @@
           "capabilities": ["video-gen"],
           "default_for": ["video-gen"],
           "pricing": {
-            "per_second": 0.035,
+            "per_second": 0.40,
+            "per_second_4k": 0.60,
             "unit": "USD",
-            "notes": "Paid preview; pricing varies by resolution"
+            "notes": "$0.40/sec at 720p-1080p, $0.60/sec at 4K"
           },
           "metadata": {
             "supports_native_audio": true,
@@ -263,9 +261,10 @@
           "capabilities": ["video-gen"],
           "default_for": [],
           "pricing": {
-            "per_second": 0.02,
+            "per_second": 0.15,
+            "per_second_4k": 0.35,
             "unit": "USD",
-            "notes": "Paid preview; lower latency variant"
+            "notes": "$0.15/sec at 720p-1080p, $0.35/sec at 4K"
           },
           "metadata": {
             "supports_native_audio": true,
@@ -279,9 +278,10 @@
           "capabilities": ["video-gen"],
           "default_for": [],
           "pricing": {
-            "per_second": 0.015,
+            "per_second": 0.40,
+            "per_second_fast": 0.15,
             "unit": "USD",
-            "notes": "GA; lower pricing tier"
+            "notes": "Standard $0.40/sec, Fast $0.15/sec"
           },
           "metadata": {
             "supports_native_audio": false,
@@ -333,10 +333,10 @@
           "capabilities": ["chat"],
           "default_for": ["chat"],
           "pricing": {
-            "input_per_1m_tokens": 1.25,
-            "cached_input_per_1m_tokens": 0.315,
-            "output_per_1m_tokens": 10.0,
-            "unit": "USD"
+            "input_per_1m_tokens": 2.0,
+            "output_per_1m_tokens": 12.0,
+            "unit": "USD",
+            "notes": "Pricing for <=200k context; >200k: $4.00 input, $18.00 output"
           },
           "metadata": {
             "context_window": 1000000,
@@ -353,9 +353,8 @@
           "capabilities": ["chat"],
           "default_for": [],
           "pricing": {
-            "input_per_1m_tokens": 0.15,
-            "cached_input_per_1m_tokens": 0.0375,
-            "output_per_1m_tokens": 0.60,
+            "input_per_1m_tokens": 0.50,
+            "output_per_1m_tokens": 3.0,
             "unit": "USD"
           },
           "metadata": {
@@ -380,9 +379,9 @@
           "capabilities": ["tts"],
           "default_for": ["tts"],
           "pricing": {
-            "per_1k_characters": 0.30,
-            "unit": "USD",
-            "notes": "Pricing depends on subscription tier; pay-as-you-go rates shown"
+            "credits_per_character": 1,
+            "unit": "credits",
+            "notes": "1 credit/char; cost depends on plan — Starter $5/30K, Creator $22/100K, Business $330/2M credits"
           },
           "metadata": {
             "supports_emotions": true,
@@ -398,9 +397,9 @@
           "capabilities": ["tts"],
           "default_for": [],
           "pricing": {
-            "per_1k_characters": 0.15,
-            "unit": "USD",
-            "notes": "Optimized for real-time applications"
+            "credits_per_character": 0.5,
+            "unit": "credits",
+            "notes": "0.5 credits/char; half the cost of v3/multilingual models"
           },
           "metadata": {
             "latency_ms": 75,
@@ -415,8 +414,9 @@
           "capabilities": ["tts"],
           "default_for": [],
           "pricing": {
-            "per_1k_characters": 0.18,
-            "unit": "USD"
+            "credits_per_character": 0.5,
+            "unit": "credits",
+            "notes": "0.5 credits/char; half the cost of v3/multilingual models"
           },
           "metadata": {
             "latency_ms": 250,
@@ -431,8 +431,9 @@
           "capabilities": ["tts"],
           "default_for": [],
           "pricing": {
-            "per_1k_characters": 0.30,
-            "unit": "USD"
+            "credits_per_character": 1,
+            "unit": "credits",
+            "notes": "1 credit/char; same cost as Eleven v3"
           },
           "metadata": {
             "language_count": 32,

@@ -429,55 +429,6 @@
         "credentials": [],
         "note": "Vercel handles authentication via browser on first use"
       }
-    },
-    "friday-media": {
-      "name": "Friday Media",
-      "description": "Image generation, video generation, text-to-speech, and speech-to-text",
-      "category": "media",
-      "type": "mcp",
-      "mcp": {
-        "command": "${NODE_BIN}",
-        "args": ["${PROJECT_ROOT}/mcp-servers/media-server.js"],
-        "env": {
-          "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-          "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-          "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
-          "WORKSPACE_PATH": "${WORKSPACE}",
-          "MEDIA_OUTPUT_DIR": "${WORKSPACE}/generated"
-        }
-      },
-      "setup": {
-        "credentials": [
-          {
-            "key": "openaiKey",
-            "label": "OpenAI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "sk-...",
-            "env": ["OPENAI_API_KEY"],
-            "instructions": "Get your key at https://platform.openai.com/api-keys"
-          },
-          {
-            "key": "googleKey",
-            "label": "Google AI API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "AIza...",
-            "env": ["GOOGLE_API_KEY"],
-            "instructions": "Get your key at https://aistudio.google.com/apikey"
-          },
-          {
-            "key": "elevenlabsKey",
-            "label": "ElevenLabs API Key",
-            "type": "secret",
-            "required": false,
-            "placeholder": "Your ElevenLabs key",
-            "env": ["ELEVENLABS_API_KEY"],
-            "instructions": "Get your key at https://elevenlabs.io"
-          }
-        ],
-        "note": "At least one provider key is needed. More keys = more capabilities."
-      }
     }
   }
 }

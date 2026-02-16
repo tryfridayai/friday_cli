@@ -22,6 +22,48 @@ function ask(rl, question) {
   });
 }
 
+function askSecret(rl, prompt) {
+  return new Promise((resolve) => {
+    rl.pause();
+    rl.terminal = false;
+    process.stdout.write(prompt);
+    let input = '';
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    process.stdin.resume();
+    const onData = (data) => {
+      const str = data.toString();
+      for (const char of str) {
+        if (char === '\r' || char === '\n') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw || false);
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve(input);
+          return;
+        }
+        if (char === '\x03') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw || false);
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve('');
+          return;
+        }
+        if (char === '\x7f' || char === '\b') {
+          if (input.length > 0) { input = input.slice(0, -1); process.stdout.write('\b \b'); }
+          continue;
+        }
+        input += char;
+        process.stdout.write('*');
+      }
+    };
+    process.stdin.on('data', onData);
+  });
+}
+
 function maskValue(value) {
   if (!value || value.length < 8) return '****';
   return value.slice(0, 4) + '...' + value.slice(-4);
@@ -118,15 +160,12 @@ export default async function install(args) {
 
     const requiredTag = field.required ? '' : ` ${DIM}(optional)${RESET}`;
     const prompt = `  ${field.label}${requiredTag}: `;
-    const value = await ask(rl, prompt);
+    const value = field.type === 'secret'
+      ? await askSecret(rl, prompt)
+      : await ask(rl, prompt);
 
     if (value) {
       credentials[field.key] = value;
-      if (field.type === 'secret') {
-        // Clear the line and reprint masked
-        process.stdout.write(`\x1b[1A\x1b[2K`);
-        console.log(`  ${field.label}${requiredTag}: ${DIM}${maskValue(value)}${RESET}`);
-      }
     } else if (field.required) {
       console.log(`  ${YELLOW}Skipped (required). Plugin may not work without this.${RESET}`);
     }

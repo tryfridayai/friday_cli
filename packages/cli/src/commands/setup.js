@@ -54,6 +54,50 @@ function ask(rl, question) {
   });
 }
 
+function askSecret(rl, prompt) {
+  return new Promise((resolve) => {
+    rl.pause();
+    rl.terminal = false;
+    process.stdout.write(prompt);
+    let input = '';
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    const onData = (data) => {
+      const str = data.toString();
+      for (const char of str) {
+        if (char === '\r' || char === '\n') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw || false);
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve(input);
+          return;
+        }
+        if (char === '\x03') {
+          process.stdin.removeListener('data', onData);
+          if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw || false);
+          process.stdout.write('\n');
+          rl.terminal = true;
+          rl.resume();
+          resolve('');
+          return;
+        }
+        if (char === '\x7f' || char === '\b') {
+          if (input.length > 0) { input = input.slice(0, -1); process.stdout.write('\b \b'); }
+          continue;
+        }
+        input += char;
+        process.stdout.write('*');
+      }
+    };
+    process.stdin.on('data', onData);
+  });
+}
+
 function maskKey(key) {
   if (!key || key.length < 8) return '****';
   return key.slice(0, 7) + '...' + key.slice(-4);
@@ -78,7 +122,7 @@ export default async function setup(args) {
     console.log(`  Anthropic API key found: ${maskKey(existingKey)}`);
     const change = await ask(rl, '  Change it? (y/N): ');
     if (change.toLowerCase() === 'y') {
-      const key = await ask(rl, '  Paste your Anthropic API key: ');
+      const key = await askSecret(rl, '  Paste your Anthropic API key: ');
       if (key) {
         envVars.ANTHROPIC_API_KEY = key;
         config.anthropicApiKey = key;
@@ -89,7 +133,7 @@ export default async function setup(args) {
     console.log('  Friday uses Claude by Anthropic as its AI engine.');
     console.log('  Get a key at: https://console.anthropic.com/settings/keys');
     console.log('');
-    const key = await ask(rl, '  Paste your API key: ');
+    const key = await askSecret(rl, '  Paste your API key: ');
     if (!key) {
       console.log('  No key provided. You can set ANTHROPIC_API_KEY in your environment later.');
     } else {
@@ -148,19 +192,19 @@ export default async function setup(args) {
   console.log('  (Press Enter to skip any)');
   console.log('');
 
-  const openaiKey = await ask(rl, '  OpenAI API key (for image/video gen): ');
+  const openaiKey = await askSecret(rl, '  OpenAI API key (for image/video gen): ');
   if (openaiKey) {
     envVars.OPENAI_API_KEY = openaiKey;
     config.openaiApiKey = openaiKey;
   }
 
-  const googleKey = await ask(rl, '  Google AI API key (for Gemini/Imagen): ');
+  const googleKey = await askSecret(rl, '  Google AI API key (for Gemini/Imagen): ');
   if (googleKey) {
     envVars.GOOGLE_API_KEY = googleKey;
     config.googleApiKey = googleKey;
   }
 
-  const elevenKey = await ask(rl, '  ElevenLabs API key (for voice): ');
+  const elevenKey = await askSecret(rl, '  ElevenLabs API key (for voice): ');
   if (elevenKey) {
     envVars.ELEVENLABS_API_KEY = elevenKey;
     config.elevenlabsApiKey = elevenKey;

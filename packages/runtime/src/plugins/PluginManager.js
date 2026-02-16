@@ -23,7 +23,8 @@ const CONFIG_DIR = process.env.FRIDAY_CONFIG_DIR || path.join(os.homedir(), '.fr
 const PLUGINS_FILE = path.join(CONFIG_DIR, 'plugins.json');
 
 // Core servers that are always loaded (not plugins)
-const CORE_SERVERS = new Set(['filesystem', 'terminal']);
+// friday-media provides image/video/voice generation when API keys are set
+const CORE_SERVERS = new Set(['filesystem', 'terminal', 'friday-media']);
 
 export class PluginManager {
   constructor() {
