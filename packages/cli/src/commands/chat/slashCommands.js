@@ -31,7 +31,7 @@ const commands = [
   { name: 'help',     aliases: ['h'],   description: 'Show all commands' },
   { name: 'status',   aliases: ['s'],   description: 'Session, costs, capabilities' },
   { name: 'plugins',  aliases: ['p'],   description: 'Install/uninstall/list plugins' },
-  { name: 'models',   aliases: ['m'],   description: 'List available models' },
+  { name: 'model',    aliases: ['m', 'models'], description: 'View and configure models' },
   { name: 'keys',     aliases: ['k'],   description: 'Add/update API keys' },
   { name: 'config',   aliases: [],      description: 'Permission profile, workspace' },
   { name: 'schedule', aliases: [],      description: 'Manage scheduled agents' },
@@ -275,7 +275,7 @@ export async function routeSlashCommand(input, ctx) {
     case 'help':    cmdHelp(ctx); break;
     case 'status':  await cmdStatus(ctx); break;
     case 'plugins': await cmdPlugins(ctx, argString); break;
-    case 'models':  cmdModels(ctx); break;
+    case 'model':   await cmdModel(ctx); break;
     case 'keys':    await cmdKeys(ctx); break;
     case 'config':  await cmdConfig(ctx); break;
     case 'schedule': await cmdSchedule(ctx); break;
@@ -550,71 +550,126 @@ async function pluginUninstallFlow(pm, ctx) {
   }
 }
 
-function cmdModels() {
-  console.log('');
-  console.log(sectionHeader('Available Models'));
-  console.log('');
+function formatModelPrice(pricing, capability) {
+  if (!pricing) return '';
 
-  let modelsData;
-  try {
-    const modelsPath = path.join(runtimeDir, 'src', 'providers', 'models.json');
-    modelsData = JSON.parse(fs.readFileSync(modelsPath, 'utf8'));
-  } catch {
-    console.log(errorMsg('Could not load models.json'));
-    return;
+  // Chat models: input/output per 1M tokens
+  if (pricing.input_per_1m_tokens != null) {
+    return `$${pricing.input_per_1m_tokens.toFixed(2)}/$${pricing.output_per_1m_tokens.toFixed(2)} per 1M tokens`;
   }
 
-  const envKeys = readEnvKeys();
-
-  // Group models by capability
-  const capModels = {
-    'Chat': [],
-    'Image Gen': [],
-    'TTS (Voice)': [],
-    'Video Gen': [],
-    'STT (Transcription)': [],
-  };
-
-  const capMap = {
-    'chat': 'Chat',
-    'image-gen': 'Image Gen',
-    'tts': 'TTS (Voice)',
-    'video-gen': 'Video Gen',
-    'stt': 'STT (Transcription)',
-  };
-
-  for (const [providerId, provider] of Object.entries(modelsData.providers)) {
-    const keyAvailable = !!envKeys[provider.envKey];
-    for (const [modelId, model] of Object.entries(provider.models)) {
-      for (const cap of model.capabilities) {
-        const groupName = capMap[cap] || cap;
-        if (!capModels[groupName]) capModels[groupName] = [];
-        const isDefault = model.default_for?.includes(cap);
-        capModels[groupName].push({
-          name: model.name,
-          provider: providerId,
-          description: model.description,
-          isDefault,
-          available: keyAvailable,
-        });
-      }
+  // Image models: per image (use high quality as representative)
+  if (pricing.per_image) {
+    const sizes = pricing.per_image;
+    // Pick first size entry's high quality, or standard
+    const firstSize = Object.values(sizes)[0];
+    if (typeof firstSize === 'object') {
+      const price = firstSize.high ?? firstSize.enhanced ?? firstSize.standard ?? Object.values(firstSize)[0];
+      if (price != null) return `$${price.toFixed(2)}/image`;
     }
+    if (typeof firstSize === 'number') return `$${firstSize.toFixed(2)}/image`;
   }
 
-  for (const [capName, models] of Object.entries(capModels)) {
-    if (models.length === 0) continue;
-    console.log(`  ${PURPLE}${BOLD}${capName}${RESET}`);
-    for (const m of models) {
-      const defaultTag = m.isDefault ? ` ${TEAL}(default)${RESET}` : '';
-      const availTag = m.available ? '' : ` ${DIM}(no key)${RESET}`;
-      console.log(`    ${BOLD}${m.name}${RESET}${defaultTag}${availTag}  ${DIM}${m.provider}${RESET}`);
-      console.log(`    ${DIM}${m.description}${RESET}`);
-    }
+  // Video models: per second
+  if (pricing.per_second != null) {
+    return `$${pricing.per_second.toFixed(2)}/sec`;
+  }
+
+  // TTS: per 1M or 1K characters
+  if (pricing.per_1m_characters != null) {
+    return `$${pricing.per_1m_characters.toFixed(2)}/1M chars`;
+  }
+  if (pricing.per_1k_characters != null) {
+    return `$${pricing.per_1k_characters.toFixed(2)}/1K chars`;
+  }
+  // Google TTS has multiple tiers — show standard
+  if (pricing.standard_per_1m_characters != null) {
+    return `$${pricing.standard_per_1m_characters.toFixed(2)}/1M chars`;
+  }
+
+  // STT: per minute
+  if (pricing.per_minute != null) {
+    return `$${pricing.per_minute.toFixed(3)}/min`;
+  }
+
+  return '';
+}
+
+async function cmdModel(ctx) {
+  // Lazy-load ProviderRegistry (same pattern as cmdPlugins imports PluginManager)
+  const { default: ProviderRegistry } = await import(path.join(runtimeDir, 'providers', 'ProviderRegistry.js'));
+  const registry = new ProviderRegistry();
+
+  const categories = [
+    { label: 'Chat', capability: 'chat' },
+    { label: 'Image', capability: 'image-gen' },
+    { label: 'Video', capability: 'video-gen' },
+    { label: 'Voice', capability: 'tts' },
+    { label: 'STT', capability: 'stt' },
+  ];
+
+  // Category selection loop
+  while (true) {
     console.log('');
-  }
+    console.log(sectionHeader('Models'));
+    console.log('');
 
-  console.log(`  ${DIM}Model selection is automatic based on task. Use /keys to add provider keys.${RESET}`);
-  console.log('');
+    // Build category options with enabled counts
+    const catOptions = categories.map((cat) => {
+      const models = registry.getModelsForCapability(cat.capability);
+      const enabled = models.filter((m) => !m.disabled).length;
+      return {
+        label: `${cat.label}  ${DIM}(${enabled}/${models.length} enabled)${RESET}`,
+        value: cat.capability,
+      };
+    });
+    catOptions.push({ label: 'Done', value: 'done' });
+
+    const catChoice = await ctx.selectOption(catOptions, { rl: ctx.rl });
+    if (catChoice.value === 'done') {
+      console.log('');
+      console.log(success('Changes saved.'));
+      console.log('');
+      break;
+    }
+
+    const capability = catChoice.value;
+
+    // Model list loop for selected category
+    while (true) {
+      const models = registry.getModelsForCapability(capability);
+      console.log('');
+
+      // Display current model list
+      for (const m of models) {
+        const dot = m.disabled ? `${RED}\u25cb${RESET}` : `${TEAL}\u25cf${RESET}`;
+        const defaultTag = m.isDefault ? '*' : '';
+        const statusTag = m.disabled ? `${RED}disabled${RESET}` : `${TEAL}enabled${RESET}`;
+        const keyTag = m.hasKey ? '' : `  ${DIM}(no key)${RESET}`;
+        const price = formatModelPrice(m.pricing, capability);
+        const priceTag = price ? `  ${DIM}| ${price}${RESET}` : '';
+        console.log(`  ${dot} ${BOLD}${m.name}${defaultTag}${RESET}  ${DIM}${m.providerId}${RESET}  ${statusTag}${keyTag}${priceTag}`);
+      }
+      console.log('');
+
+      // Build toggle options
+      const toggleOptions = models.map((m) => ({
+        label: `${m.disabled ? 'Enable' : 'Disable'} ${m.name}`,
+        value: m.modelId,
+      }));
+      toggleOptions.push({ label: 'Back', value: 'back' });
+
+      const toggleChoice = await ctx.selectOption(toggleOptions, { rl: ctx.rl });
+      if (toggleChoice.value === 'back') break;
+
+      const modelId = toggleChoice.value;
+      const nowDisabled = registry.toggleModel(modelId);
+      const modelName = models.find((m) => m.modelId === modelId)?.name || modelId;
+      console.log(nowDisabled
+        ? `  ${RED}${modelName} disabled${RESET}`
+        : `  ${TEAL}${modelName} enabled${RESET}`);
+    }
+  }
 }
 
 async function cmdKeys(ctx) {

@@ -9,6 +9,10 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Adapter classes (lazy-loaded)
 const ADAPTER_LOADERS = {
@@ -64,7 +68,6 @@ class ProviderRegistry {
   // ─── Preferences ───────────────────────────────────────────────
 
   _loadPreferences() {
-    if (this._preferences) return this._preferences;
     try {
       if (fs.existsSync(this.preferencesPath)) {
         this._preferences = JSON.parse(fs.readFileSync(this.preferencesPath, 'utf8'));
@@ -116,6 +119,90 @@ class ProviderRegistry {
     return { ...this._loadPreferences() };
   }
 
+  // ─── Model Catalog ──────────────────────────────────────────────
+
+  _loadModelCatalog() {
+    if (this._modelCatalog) return this._modelCatalog;
+    try {
+      const modelsPath = path.join(__dirname, '..', 'src', 'providers', 'models.json');
+      this._modelCatalog = JSON.parse(fs.readFileSync(modelsPath, 'utf8'));
+    } catch {
+      this._modelCatalog = { providers: {} };
+    }
+    return this._modelCatalog;
+  }
+
+  /**
+   * Get enriched model list for a capability.
+   * @param {string} capability - One of CAPABILITIES values
+   * @returns {Array<{ modelId: string, name: string, providerId: string, pricing: object, isDefault: boolean, hasKey: boolean, disabled: boolean }>}
+   */
+  getModelsForCapability(capability) {
+    const catalog = this._loadModelCatalog();
+    const results = [];
+
+    for (const [providerId, provider] of Object.entries(catalog.providers)) {
+      const hasKey = this.hasApiKey(providerId);
+      for (const [modelId, model] of Object.entries(provider.models)) {
+        if (!model.capabilities.includes(capability)) continue;
+        results.push({
+          modelId,
+          name: model.name,
+          providerId,
+          pricing: model.pricing || {},
+          isDefault: (model.default_for || []).includes(capability),
+          hasKey,
+          disabled: this.isModelDisabled(modelId),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  // ─── Disabled Models ──────────────────────────────────────────
+
+  /**
+   * Toggle a model's disabled state. Returns true if now disabled.
+   * @param {string} modelId
+   * @returns {boolean}
+   */
+  toggleModel(modelId) {
+    this._loadPreferences();
+    if (!Array.isArray(this._preferences.disabledModels)) {
+      this._preferences.disabledModels = [];
+    }
+    const idx = this._preferences.disabledModels.indexOf(modelId);
+    if (idx >= 0) {
+      this._preferences.disabledModels.splice(idx, 1);
+      this._savePreferences();
+      return false; // now enabled
+    } else {
+      this._preferences.disabledModels.push(modelId);
+      this._savePreferences();
+      return true; // now disabled
+    }
+  }
+
+  /**
+   * Check if a model is disabled.
+   * @param {string} modelId
+   * @returns {boolean}
+   */
+  isModelDisabled(modelId) {
+    const prefs = this._loadPreferences();
+    return Array.isArray(prefs.disabledModels) && prefs.disabledModels.includes(modelId);
+  }
+
+  /**
+   * Get all disabled model IDs.
+   * @returns {string[]}
+   */
+  getDisabledModels() {
+    const prefs = this._loadPreferences();
+    return Array.isArray(prefs.disabledModels) ? [...prefs.disabledModels] : [];
+  }
+
   // ─── API Key Helpers ───────────────────────────────────────────
 
   /**
@@ -146,21 +233,27 @@ class ProviderRegistry {
    * @returns {string|null} provider ID or null if none available
    */
   resolveProvider(capability, requestedProvider = null) {
+    // Helper: check if a provider has at least one enabled model for this capability
+    const hasEnabledModel = (pid) => {
+      const models = this.getModelsForCapability(capability);
+      return models.some((m) => m.providerId === pid && !m.disabled);
+    };
+
     // 1. Explicit request
-    if (requestedProvider && this.hasApiKey(requestedProvider)) {
+    if (requestedProvider && this.hasApiKey(requestedProvider) && hasEnabledModel(requestedProvider)) {
       return requestedProvider;
     }
 
     // 2. User preference
     const pref = this.getPreference(capability);
-    if (pref?.provider && this.hasApiKey(pref.provider)) {
+    if (pref?.provider && this.hasApiKey(pref.provider) && hasEnabledModel(pref.provider)) {
       return pref.provider;
     }
 
     // 3. Default priority
     const priorities = DEFAULT_PRIORITY[capability] || [];
     for (const pid of priorities) {
-      if (this.hasApiKey(pid)) return pid;
+      if (this.hasApiKey(pid) && hasEnabledModel(pid)) return pid;
     }
 
     return null;
@@ -171,10 +264,23 @@ class ProviderRegistry {
    * Priority: explicit → user preference → provider default.
    */
   resolveModel(capability, providerId, requestedModel = null) {
-    if (requestedModel) return requestedModel;
+    if (requestedModel && !this.isModelDisabled(requestedModel)) return requestedModel;
+
     const pref = this.getPreference(capability);
-    if (pref?.provider === providerId && pref?.model) return pref.model;
-    return null; // provider will use its own default
+    if (pref?.provider === providerId && pref?.model && !this.isModelDisabled(pref.model)) {
+      return pref.model;
+    }
+
+    // Pick first enabled model for this provider+capability
+    const models = this.getModelsForCapability(capability);
+    const enabled = models.filter((m) => m.providerId === providerId && !m.disabled);
+    if (enabled.length > 0) {
+      // Prefer the default model if enabled
+      const def = enabled.find((m) => m.isDefault);
+      return def ? def.modelId : enabled[0].modelId;
+    }
+
+    return null; // all models disabled for this provider
   }
 
   /**

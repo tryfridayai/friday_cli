@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-02-15
+
+#### Added
+- **`/model` command** — Interactive per-model enable/disable UI. Browse models by category (Chat, Image, Video, Voice, STT), see pricing and status, toggle individual models on/off. Replaces the old read-only `/models` list.
+- **Disabled model tracking** in `ProviderRegistry` — `toggleModel()`, `isModelDisabled()`, `getDisabledModels()` methods with persistence in `provider-preferences.json`
+- **Model catalog API** — `getModelsForCapability()` returns enriched model list with pricing, default status, key availability, and disabled state
+- **`formatModelPrice()` helper** — Human-readable pricing display for all model types (per token, per image, per second, per character, per minute)
+
+#### Changed
+- **Provider resolution respects disabled models** — `resolveProvider()` skips providers where all models for a capability are disabled; `resolveModel()` skips disabled models and picks the next enabled one
+- **Preferences file re-read on every access** — Removed cache guard in `_loadPreferences()` so MCP server picks up CLI changes without restart
+- **`/models` renamed to `/model`** — Old name still works as an alias, along with `/m`
+
 ### 2025-02-15
 
 #### Added
