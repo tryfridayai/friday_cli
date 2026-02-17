@@ -22,6 +22,19 @@ const iconAgents = (
   </svg>
 );
 
+const iconContent = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+    <line x1="7" y1="2" x2="7" y2="22" />
+    <line x1="17" y1="2" x2="17" y2="22" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <line x1="2" y1="7" x2="7" y2="7" />
+    <line x1="2" y1="17" x2="7" y2="17" />
+    <line x1="17" y1="7" x2="22" y2="7" />
+    <line x1="17" y1="17" x2="22" y2="17" />
+  </svg>
+);
+
 const iconSettings = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
@@ -62,6 +75,8 @@ export default function Sidebar() {
   const previewOpen = useStore((s) => s.previewOpen);
   const setPreviewOpen = useStore((s) => s.setPreviewOpen);
   const setPreviewTab = useStore((s) => s.setPreviewTab);
+  const editorOpen = useStore((s) => s.editorOpen);
+  const closeEditor = useStore((s) => s.closeEditor);
 
   return (
     <div className="drag-region w-14 flex-shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col items-center py-3 gap-1">
@@ -97,10 +112,31 @@ export default function Sidebar() {
       <SidebarButton
         icon={iconAgents}
         label="Agents"
-        active={previewOpen}
+        active={previewOpen && !editorOpen}
         onClick={() => {
-          setPreviewOpen(!previewOpen);
-          setPreviewTab('agents');
+          if (editorOpen) {
+            closeEditor();
+            setPreviewOpen(true);
+            setPreviewTab('agents');
+          } else {
+            setPreviewOpen(!previewOpen);
+            setPreviewTab('agents');
+          }
+        }}
+      />
+
+      {/* Content */}
+      <SidebarButton
+        icon={iconContent}
+        label="Content"
+        active={editorOpen || (previewOpen && useStore.getState().previewTab === 'content')}
+        onClick={() => {
+          if (editorOpen) {
+            closeEditor();
+          } else {
+            setPreviewOpen(true);
+            setPreviewTab('content');
+          }
         }}
       />
 

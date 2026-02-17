@@ -500,3 +500,107 @@ ipcMain.handle('open-file-path', (_event, filePath) => {
 ipcMain.on('restart-backend', () => {
   backend.restart();
 });
+
+// ── Content / Project IPC ────────────────────────────────────────────────
+
+ipcMain.handle('scan-content-files', async () => {
+  const workspace = process.env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace');
+  const projectsDir = path.join(workspace, 'generated', 'projects');
+  try {
+    fs.mkdirSync(projectsDir, { recursive: true });
+  } catch { /* exists */ }
+
+  let entries;
+  try {
+    entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const results = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const filePath = path.join(projectsDir, entry.name);
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const data = JSON.parse(raw);
+      const stat = fs.statSync(filePath);
+      results.push({
+        name: entry.name,
+        path: filePath,
+        title: data.title || entry.name.replace('.json', ''),
+        sceneCount: Array.isArray(data.scenes) ? data.scenes.length : 0,
+        modified: stat.mtimeMs,
+      });
+    } catch { /* skip invalid files */ }
+  }
+  results.sort((a, b) => b.modified - a.modified);
+  return results;
+});
+
+ipcMain.handle('read-project', async (_event, filePath) => {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('save-project', async (_event, filePath, data) => {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('create-demo-project', async () => {
+  const workspace = process.env.FRIDAY_WORKSPACE || path.join(os.homedir(), 'FridayWorkspace');
+  const projectsDir = path.join(workspace, 'generated', 'projects');
+  try {
+    fs.mkdirSync(projectsDir, { recursive: true });
+  } catch { /* exists */ }
+
+  const timestamp = Date.now();
+  const fileName = `proj_${timestamp}.json`;
+  const filePath = path.join(projectsDir, fileName);
+
+  const project = {
+    title: 'Demo Project',
+    created: timestamp,
+    scenes: [
+      {
+        id: `scene_${timestamp}_1`,
+        heading: 'Scene 1: Opening',
+        script: 'Welcome to the demo project. This is the opening scene where we introduce the main theme.',
+        image: null,
+        video: null,
+        audio: null,
+        duration: 10,
+      },
+      {
+        id: `scene_${timestamp}_2`,
+        heading: 'Scene 2: Development',
+        script: 'In this scene we develop the core idea. The visuals transition to show progress and momentum.',
+        image: null,
+        video: null,
+        audio: null,
+        duration: 15,
+      },
+      {
+        id: `scene_${timestamp}_3`,
+        heading: 'Scene 3: Conclusion',
+        script: 'We wrap up with a strong closing statement. The final visuals leave a lasting impression.',
+        image: null,
+        video: null,
+        audio: null,
+        duration: 10,
+      },
+    ],
+  };
+
+  fs.writeFileSync(filePath, JSON.stringify(project, null, 2), 'utf8');
+  return { path: filePath, project };
+});

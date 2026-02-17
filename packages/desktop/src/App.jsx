@@ -7,12 +7,14 @@ import ChatView from './components/chat/ChatView';
 import PreviewPanel from './components/preview/PreviewPanel';
 import ResizeHandle from './components/layout/ResizeHandle';
 import SettingsModal from './components/settings/SettingsModal';
+import EditorPanel from './components/editor/EditorPanel';
 
 export default function App() {
   const view = useStore((s) => s.view);
   const theme = useStore((s) => s.theme);
   const showSettings = useStore((s) => s.showSettings);
   const previewOpen = useStore((s) => s.previewOpen);
+  const editorOpen = useStore((s) => s.editorOpen);
 
   // Apply theme
   useEffect(() => {
@@ -31,6 +33,7 @@ export default function App() {
           store.setBackendReady(true);
           store.loadSessions();
           store.loadMediaFiles();
+          store.loadContentFiles();
           store.loadApiKeys().then(() => {
             // Show API keys modal on first startup if no keys configured
             const keys = useStore.getState().apiKeys;
@@ -217,16 +220,22 @@ export default function App() {
 
       {/* Main content */}
       <div className="flex flex-1 min-w-0">
-        {/* Primary panel */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        {/* Primary panel (chat / home) */}
+        <div
+          className="min-w-0 flex flex-col"
+          style={{ flex: editorOpen ? '0 0 30%' : '1 1 0%' }}
+        >
           {/* macOS title bar spacer */}
           <div className="drag-region h-10 flex-shrink-0 bg-surface-0" />
 
           {view === 'home' ? <HomePage /> : <ChatView />}
         </div>
 
-        {/* Resize handle + Preview panel */}
-        {previewOpen && (
+        {/* Editor panel */}
+        {editorOpen && <EditorPanel />}
+
+        {/* Resize handle + Preview panel (hidden when editor is open) */}
+        {previewOpen && !editorOpen && (
           <>
             <ResizeHandle />
             <PreviewPanel />

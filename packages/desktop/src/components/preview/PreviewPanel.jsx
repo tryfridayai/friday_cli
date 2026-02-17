@@ -1,6 +1,7 @@
 import useStore from '../../store/useStore';
 import MediaViewer from './MediaViewer';
 import AgentsPanel from '../agents/AgentsPanel';
+import ContentList from '../content/ContentList';
 
 export default function PreviewPanel() {
   const previewTab = useStore((s) => s.previewTab);
@@ -16,7 +17,7 @@ export default function PreviewPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <div className="flex gap-1">
-          {['preview', 'agents'].map((tab) => (
+          {['preview', 'agents', 'content'].map((tab) => (
             <button
               key={tab}
               onClick={() => setPreviewTab(tab)}
@@ -45,6 +46,8 @@ export default function PreviewPanel() {
       <div className="flex-1 overflow-y-auto">
         {previewTab === 'preview' ? (
           <MediaViewer content={previewContent} mediaFiles={mediaFiles} onSelect={setPreviewContent} />
+        ) : previewTab === 'content' ? (
+          <ContentList />
         ) : (
           <AgentsPanel />
         )}

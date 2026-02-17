@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-02-17
+
+#### Added
+- **Desktop: Content Editor (Phase 1)** — Multi-scene project editor for viewing and editing media projects. Features: Content tab in preview panel listing project files from `~/FridayWorkspace/generated/projects/`, full editor layout with Scene Rail (left), Script Editor (center), Canvas (right), and Timeline Bar (bottom). Clicking a project opens the editor and shrinks chat to 30%. Includes "Create Demo" button for generating test projects. Editable script text with debounced 500ms save to disk. Playback controls (play/pause, prev/next scene, progress bar with colored scene segments). Canvas renders video/image media via `friday-media://` protocol. IPC layer with scan-content-files, read-project, save-project, and create-demo-project handlers.
+
 ### 2026-02-16
 
 #### Changed

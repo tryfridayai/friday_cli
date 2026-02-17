@@ -54,6 +54,12 @@ contextBridge.exposeInMainWorld('friday', {
   // ── Media files ──────────────────────────────────────────────────────
   scanMediaFiles: () => ipcRenderer.invoke('scan-media-files'),
 
+  // ── Content / Projects ──────────────────────────────────────────────
+  scanContentFiles: () => ipcRenderer.invoke('scan-content-files'),
+  readProject: (filePath) => ipcRenderer.invoke('read-project', filePath),
+  saveProject: (filePath, data) => ipcRenderer.invoke('save-project', filePath, data),
+  createDemoProject: () => ipcRenderer.invoke('create-demo-project'),
+
   // ── Utility ─────────────────────────────────────────────────────────
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openFilePath: (filePath) => ipcRenderer.invoke('open-file-path', filePath),

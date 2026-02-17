@@ -97,6 +97,59 @@ const useStore = create((set, get) => ({
     set({ mediaFiles: files || { images: [], audio: [], video: [] } });
   },
 
+  // ── Content Editor ───────────────────────────────────────────────────
+  editorOpen: false,
+  editorProject: null,
+  editorProjectPath: null,
+  activeSceneIndex: 0,
+  isPlaying: false,
+  playbackTime: 0,
+  contentFiles: [],
+
+  openProject: async (filePath) => {
+    if (!window.friday) return;
+    const data = await window.friday.readProject(filePath);
+    if (data && !data.error) {
+      set({
+        editorOpen: true,
+        editorProject: data,
+        editorProjectPath: filePath,
+        activeSceneIndex: 0,
+        isPlaying: false,
+        playbackTime: 0,
+        previewOpen: false,
+      });
+    }
+  },
+
+  closeEditor: () => set({
+    editorOpen: false,
+    editorProject: null,
+    editorProjectPath: null,
+    activeSceneIndex: 0,
+    isPlaying: false,
+    playbackTime: 0,
+  }),
+
+  updateSceneScript: (index, text) => {
+    const state = get();
+    if (!state.editorProject) return;
+    const scenes = [...state.editorProject.scenes];
+    scenes[index] = { ...scenes[index], script: text };
+    const updatedProject = { ...state.editorProject, scenes };
+    set({ editorProject: updatedProject });
+    // Fire-and-forget save to disk
+    if (window.friday && state.editorProjectPath) {
+      window.friday.saveProject(state.editorProjectPath, updatedProject);
+    }
+  },
+
+  loadContentFiles: async () => {
+    if (!window.friday) return;
+    const files = await window.friday.scanContentFiles();
+    set({ contentFiles: files || [] });
+  },
+
   // ── Completion cost ───────────────────────────────────────────────────
   lastCost: null,
   setLastCost: (cost) => set({ lastCost: cost }),
