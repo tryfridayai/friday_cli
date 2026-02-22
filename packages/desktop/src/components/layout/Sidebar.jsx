@@ -77,6 +77,7 @@ export default function Sidebar() {
   const setPreviewTab = useStore((s) => s.setPreviewTab);
   const editorOpen = useStore((s) => s.editorOpen);
   const closeEditor = useStore((s) => s.closeEditor);
+  const historyOpen = useStore((s) => s.historyOpen);
 
   return (
     <div className="drag-region w-14 flex-shrink-0 bg-surface-1 border-r border-border-subtle flex flex-col items-center py-3 gap-1">
@@ -100,12 +101,15 @@ export default function Sidebar() {
         onClick={() => useStore.setState({ view: 'chat' })}
       />
 
-      {/* History — opens the home page which shows sessions */}
+      {/* History — toggles slide-out history panel */}
       <SidebarButton
         icon={iconHistory}
         label="History"
-        active={view === 'home'}
-        onClick={() => useStore.setState({ view: 'home' })}
+        active={historyOpen}
+        onClick={() => {
+          const { historyOpen } = useStore.getState();
+          useStore.setState({ historyOpen: !historyOpen });
+        }}
       />
 
       {/* Agents */}

@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('friday', {
   // ── Sessions ────────────────────────────────────────────────────────
   getSessions: () => ipcRenderer.invoke('get-sessions'),
   deleteSession: (sessionId) => ipcRenderer.invoke('delete-session', sessionId),
+  getSessionEvents: (sessionId) => ipcRenderer.invoke('get-session-events', sessionId),
 
   // ── MCP Servers ─────────────────────────────────────────────────────
   getMcpServers: () => ipcRenderer.send('mcp-get-servers'),

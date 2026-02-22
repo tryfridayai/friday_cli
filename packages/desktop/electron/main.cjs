@@ -449,9 +449,16 @@ ipcMain.handle('scan-media-files', async () => {
 
 // ── Session history IPC ─────────────────────────────────────────────────
 
+// Sessions are stored by the runtime at runtimeDir/sessions/ (matching config.js logic)
+function getSessionsPath() {
+  return process.env.FRIDAY_SESSIONS_PATH
+    ? path.resolve(process.env.FRIDAY_SESSIONS_PATH)
+    : path.join(runtimeDir, 'sessions');
+}
+
 ipcMain.handle('get-sessions', async () => {
   try {
-    const sessionsPath = path.join(os.homedir(), '.friday', 'sessions');
+    const sessionsPath = getSessionsPath();
     const indexPath = path.join(sessionsPath, 'sessions.index.json');
     if (fs.existsSync(indexPath)) {
       const raw = fs.readFileSync(indexPath, 'utf8');
@@ -466,12 +473,13 @@ ipcMain.handle('get-sessions', async () => {
 
 ipcMain.handle('delete-session', async (_event, sessionId) => {
   try {
-    const sessionsPath = path.join(os.homedir(), '.friday', 'sessions', sessionId);
-    if (fs.existsSync(sessionsPath)) {
-      fs.rmSync(sessionsPath, { recursive: true, force: true });
+    const sessionsPath = getSessionsPath();
+    const sessionDir = path.join(sessionsPath, sessionId);
+    if (fs.existsSync(sessionDir)) {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
     }
     // Reload index
-    const indexPath = path.join(os.homedir(), '.friday', 'sessions', 'sessions.index.json');
+    const indexPath = path.join(sessionsPath, 'sessions.index.json');
     if (fs.existsSync(indexPath)) {
       const sessions = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
       const filtered = sessions.filter((s) => s.id !== sessionId);
@@ -480,6 +488,22 @@ ipcMain.handle('delete-session', async (_event, sessionId) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-session-events', async (_event, sessionId) => {
+  try {
+    const sessionsPath = getSessionsPath();
+    const logPath = path.join(sessionsPath, sessionId, 'events.jsonl');
+    if (!fs.existsSync(logPath)) return [];
+    const data = fs.readFileSync(logPath, 'utf8');
+    const lines = data.split('\n').filter(Boolean);
+    return lines.slice(-500).map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean);
+  } catch (err) {
+    console.error('[Sessions] Error reading events:', err.message);
+    return [];
   }
 });
 

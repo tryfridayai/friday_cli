@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-02-20
+
+#### Added
+- **Desktop: Session History Panel** — Clicking the History icon in the sidebar now opens a slide-out panel listing all past sessions (not just the last 5). Features: search/filter sessions by title, resume any session with past messages loaded from `events.jsonl`, delete sessions with double-click confirmation, and auto-close on session selection. Added `get-session-events` IPC handler for reading session event logs.
+
+#### Fixed
+- **Desktop: Sessions not loading** — Session IPC handlers (`get-sessions`, `delete-session`, `get-session-events`) were reading from `~/.friday/sessions/` but the runtime stores sessions at `{runtimeDir}/sessions/`. Fixed to use a shared `getSessionsPath()` helper that matches the runtime's `config.js` logic (respects `FRIDAY_SESSIONS_PATH` env var, falls back to `runtimeDir/sessions/`). Also fixed event parsing to unwrap the `{ payload: { type, ... } }` envelope format used by `events.jsonl`.
+
 ### 2026-02-17
 
 #### Added

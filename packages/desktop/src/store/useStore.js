@@ -78,6 +78,10 @@ const useStore = create((set, get) => ({
   scheduledAgents: [],
   setScheduledAgents: (agents) => set({ scheduledAgents: agents }),
 
+  // ── History panel ───────────────────────────────────────────────────
+  historyOpen: false,
+  setHistoryOpen: (v) => set({ historyOpen: v }),
+
   // ── Preview panel ─────────────────────────────────────────────────────
   previewOpen: true,
   setPreviewOpen: (v) => set({ previewOpen: v }),
@@ -169,11 +173,38 @@ const useStore = create((set, get) => ({
     if (window.friday) window.friday.newSession();
   },
 
-  resumeSession: (id) => {
+  resumeSession: async (id) => {
+    // Load past messages from events.jsonl
+    let pastMessages = [];
+    if (window.friday) {
+      try {
+        const events = await window.friday.getSessionEvents(id);
+        for (const event of events) {
+          // Events are wrapped: { timestamp, direction, payload: { type, ... } }
+          const p = event.payload || event;
+          if (p.type === 'query' && p.message) {
+            pastMessages.push({ role: 'user', content: p.message });
+          } else if (p.type === 'complete' && p.response) {
+            pastMessages.push({ role: 'assistant', content: p.response });
+          } else if (p.type === 'chunk' && p.text) {
+            // Accumulate chunks into the last assistant message
+            const last = pastMessages[pastMessages.length - 1];
+            if (last && last.role === 'assistant') {
+              last.content += p.text;
+            } else {
+              pastMessages.push({ role: 'assistant', content: p.text });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Store] Error loading session events:', err);
+      }
+    }
     set({
       sessionId: id,
-      messages: [],
+      messages: pastMessages,
       view: 'chat',
+      historyOpen: false,
       isStreaming: false,
       isThinking: false,
       permissionRequest: null,

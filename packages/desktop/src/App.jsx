@@ -8,6 +8,7 @@ import PreviewPanel from './components/preview/PreviewPanel';
 import ResizeHandle from './components/layout/ResizeHandle';
 import SettingsModal from './components/settings/SettingsModal';
 import EditorPanel from './components/editor/EditorPanel';
+import HistoryPanel from './components/history/HistoryPanel';
 
 export default function App() {
   const view = useStore((s) => s.view);
@@ -15,6 +16,7 @@ export default function App() {
   const showSettings = useStore((s) => s.showSettings);
   const previewOpen = useStore((s) => s.previewOpen);
   const editorOpen = useStore((s) => s.editorOpen);
+  const historyOpen = useStore((s) => s.historyOpen);
 
   // Apply theme
   useEffect(() => {
@@ -217,6 +219,9 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden">
       {/* Sidebar */}
       <Sidebar />
+
+      {/* History panel */}
+      {historyOpen && <HistoryPanel />}
 
       {/* Main content */}
       <div className="flex flex-1 min-w-0">
